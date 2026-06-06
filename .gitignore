@@ -1,0 +1,24 @@
+# Local runtime data
+operator-tool/data/runs.json
+operator-tool/data/*.json
+!operator-tool/data/.gitkeep
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+operator-tool/.env
+operator-tool/.env.*
+!operator-tool/.env.example
+
+# Build/package artifacts
+*.zip
+developer-handoff-online-version/
+
+# Pilot notes and one-off local automation records
+automation/
+
+# System/editor files
+.DS_Store
+node_modules/
+npm-debug.log*

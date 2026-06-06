@@ -1,0 +1,22 @@
+services:
+  portfolio-setup-operator:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4173
+      DATA_DIR: /app/data
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
+      BIGQUERY_CLOUD_PROJECT_ID: "${BIGQUERY_CLOUD_PROJECT_ID:-son-gcloud-452110-e8}"
+      BIGQUERY_DATA_LOCATION: "${BIGQUERY_DATA_LOCATION:-Frankfurt (europe-west3)}"
+    ports:
+      - "4173:4173"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4173/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
