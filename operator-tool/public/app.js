@@ -6,6 +6,8 @@ const state = {
 
 const DEFAULT_BIGQUERY_PROJECT_ID = "son-gcloud-452110-e8";
 const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
+const AUTH_SESSION_KEY = "connection_setup_authenticated";
+const ACCESS_CODE_HASH = "fc647fcca5fd04891c8939363e7a381c876b0445160a8ac7e3c00b5a8249c133";
 
 const stepMeta = [
   {
@@ -84,6 +86,12 @@ const confirmations = [
 ];
 
 const els = {
+  loginScreen: document.querySelector("#login-screen"),
+  appShell: document.querySelector("#app-shell"),
+  loginForm: document.querySelector("#login-form"),
+  loginAccessCode: document.querySelector("#login-access-code"),
+  loginError: document.querySelector("#login-error"),
+  logout: document.querySelector("#logout"),
   form: document.querySelector("#new-run-form"),
   formError: document.querySelector("#form-error"),
   runList: document.querySelector("#run-list"),
@@ -114,6 +122,62 @@ const els = {
   summary: document.querySelector("#summary-output"),
   toast: document.querySelector("#toast")
 };
+
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(value);
+  const hash = await window.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isAuthenticated() {
+  return window.sessionStorage.getItem(AUTH_SESSION_KEY) === "1";
+}
+
+function showLogin(message = "") {
+  els.appShell?.classList.add("hidden");
+  els.loginScreen?.classList.remove("hidden");
+  if (message) {
+    els.loginError.textContent = message;
+    els.loginError.classList.remove("hidden");
+  } else {
+    els.loginError.textContent = "";
+    els.loginError.classList.add("hidden");
+  }
+  window.setTimeout(() => els.loginAccessCode?.focus(), 0);
+}
+
+async function showApp() {
+  els.loginScreen?.classList.add("hidden");
+  els.appShell?.classList.remove("hidden");
+  await loadRuns();
+}
+
+async function initAuth() {
+  if (isAuthenticated()) {
+    await showApp();
+    return;
+  }
+  showLogin();
+}
+
+els.loginForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const accessCode = String(els.loginAccessCode?.value || "").trim();
+  const hash = await sha256Hex(accessCode);
+  if (hash !== ACCESS_CODE_HASH) {
+    showLogin("Access code is not correct.");
+    els.loginAccessCode.value = "";
+    return;
+  }
+  window.sessionStorage.setItem(AUTH_SESSION_KEY, "1");
+  els.loginAccessCode.value = "";
+  await showApp();
+});
+
+els.logout?.addEventListener("click", () => {
+  window.sessionStorage.removeItem(AUTH_SESSION_KEY);
+  showLogin();
+});
 
 function activeRun() {
   return state.runs.find((run) => run.id === state.activeId) || null;
@@ -850,7 +914,7 @@ document.body.addEventListener("click", async (event) => {
   showToast("Copied");
 });
 
-loadRuns().catch((error) => {
+initAuth().catch((error) => {
   console.error(error);
   showToast(error.message);
 });

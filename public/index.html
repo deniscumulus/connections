@@ -7,13 +7,32 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <section id="login-screen" class="login-screen">
+      <form id="login-form" class="login-card" novalidate>
+        <span class="brand-mark">CS</span>
+        <div>
+          <p class="eyebrow">Private access</p>
+          <h1>Connection setup</h1>
+          <p class="muted">Enter the access code to open the operator console.</p>
+        </div>
+        <label>
+          Access code
+          <input id="login-access-code" name="accessCode" type="password" autocomplete="current-password" placeholder="Enter access code" />
+        </label>
+        <div id="login-error" class="form-error hidden"></div>
+        <button class="primary" type="submit">Log in</button>
+      </form>
+    </section>
+
+    <div id="app-shell" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">PS</span>
+        <span class="brand-mark">CS</span>
         <div>
           <strong>Connection setup</strong>
           <span>Automation runner</span>
         </div>
+        <button id="logout" class="icon-button logout-button" type="button">Log out</button>
       </div>
 
       <form id="new-run-form" class="new-run" novalidate>
@@ -182,6 +201,7 @@
         </details>
       </section>
     </main>
+    </div>
 
     <div id="toast" class="toast hidden"></div>
 
