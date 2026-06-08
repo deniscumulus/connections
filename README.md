@@ -1,48 +1,21 @@
-# Portfolio Setup Operator
+# Portfolio Setup Operator, Vercel Static Mode
 
-Internal setup console for portfolio website onboarding.
+This is a Vercel-compatible conversion of the original Docker/VPS prototype.
 
-The deployable app lives in:
+## What changed
 
-```text
-operator-tool/
-```
+- The app is static, so it deploys cleanly on Vercel.
+- API calls are handled in the browser and persisted with `localStorage`.
+- No data is written to Vercel's filesystem.
 
-## Local Run
+## Important limitation
+
+This mode is best for one operator in one browser. Runs are not shared across users, devices, or browsers. For team-wide persistence, replace the local storage adapter with Vercel Postgres, KV, Blob, Supabase, Neon, or another real database.
+
+## Local preview
 
 ```bash
-cd operator-tool
 npm start
 ```
 
-Open:
-
-```text
-http://127.0.0.1:4173
-```
-
-## Server Deploy
-
-On a server:
-
-```bash
-git clone <repo-url>
-cd <repo-folder>/operator-tool
-cp .env.example .env
-docker compose up -d --build
-```
-
-Then put HTTPS and authentication in front of it.
-
-See the detailed docs inside `operator-tool/`:
-
-```text
-operator-tool/README.md
-operator-tool/DEVELOPER_HANDOFF.md
-operator-tool/FINAL_WORKFLOW_SPEC.md
-operator-tool/HOSTED_SAME_TOOL_DEPLOYMENT.md
-```
-
-## Important
-
-Do not commit real credentials, browser cookies, or local run history. The app creates `operator-tool/data/runs.json` locally/server-side at runtime.
+Then open `http://127.0.0.1:4173`.

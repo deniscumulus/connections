@@ -1,0 +1,13 @@
+{
+  "name": "portfolio-setup-operator-vercel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/check.mjs",
+    "start": "node scripts/local-preview.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
