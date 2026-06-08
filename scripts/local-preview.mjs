@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'public');
 const port = Number(process.env.PORT || 4173);
 const types = new Map([
   ['.html', 'text/html; charset=utf-8'],

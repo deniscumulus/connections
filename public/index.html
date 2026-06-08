@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Portfolio Setup Operator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">PS</span>
+        <div>
+          <strong>Portfolio Setup</strong>
+          <span>Automation runner</span>
+        </div>
+      </div>
+
+      <form id="new-run-form" class="new-run" novalidate>
+        <div class="form-intro">
+          <strong>New automated setup</strong>
+          <span>Fill this once. In production, Create Run starts the browser automation.</span>
+        </div>
+        <label>
+          Site URL
+          <input name="siteUrl" placeholder="https://www.example.com/" />
+        </label>
+        <label>
+          Project name
+          <input name="projectName" placeholder="example.com" />
+        </label>
+        <label>
+          Google email
+          <input name="googleEmail" placeholder="client@gmail.com" />
+        </label>
+        <label>
+          SE Ranking branded keywords
+          <textarea name="seRankingKeywords" placeholder="Optional. One keyword per line. Blank means the tool auto-generates 5 branded keywords."></textarea>
+        </label>
+        <details class="credential-panel">
+          <summary>Credentials for this run</summary>
+          <p>Prototype records whether a password was provided, but does not save password values.</p>
+          <label>
+            Gmail password
+            <input name="googlePassword" type="password" autocomplete="new-password" placeholder="Used for GA4 and GSC" />
+          </label>
+          <label>
+            ManageWP email
+            <input name="manageWpUsername" autocomplete="username" placeholder="managewp@example.com" />
+          </label>
+          <label>
+            ManageWP password
+            <input name="manageWpPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            Yamix email
+            <input name="yamixUsername" autocomplete="username" placeholder="yamix@example.com" />
+          </label>
+          <label>
+            Yamix password
+            <input name="yamixPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            SE Ranking email
+            <input name="seRankingUsername" autocomplete="username" placeholder="seranking@example.com" />
+          </label>
+          <label>
+            SE Ranking password
+            <input name="seRankingPassword" type="password" autocomplete="new-password" />
+          </label>
+        </details>
+        <div id="form-error" class="form-error hidden"></div>
+        <button class="primary" type="submit">Create Run & Start</button>
+      </form>
+
+      <div class="run-list-head">
+        <h2>Runs</h2>
+        <button id="refresh-runs" type="button" class="icon-button" title="Refresh runs">Refresh</button>
+      </div>
+      <div id="run-list" class="run-list"></div>
+    </aside>
+
+    <main class="main">
+      <section id="empty-state" class="empty-state">
+        <p class="eyebrow">Ready</p>
+        <h1>Waiting for a run</h1>
+        <p>Create a run from the left panel. The setup status will appear here.</p>
+      </section>
+
+      <section id="run-detail" class="run-detail hidden">
+        <section class="run-console" aria-live="polite">
+          <div class="run-console-head">
+            <div>
+              <p class="eyebrow">Active run</p>
+              <h1 id="run-title"></h1>
+              <p id="run-subtitle" class="muted"></p>
+            </div>
+            <span id="status-pill" class="pill"></span>
+          </div>
+
+          <div class="current-step-card">
+            <span id="step-count" class="step-count"></span>
+            <h2 id="current-step-title"></h2>
+            <p id="current-step-message"></p>
+          </div>
+
+          <div class="progress-wrap compact-progress">
+            <div class="progress-label">
+              <span id="progress-text"></span>
+              <span id="updated-text"></span>
+            </div>
+            <div class="progress-bar"><span id="progress-bar"></span></div>
+          </div>
+
+          <div id="operator-intervention" class="operator-intervention hidden">
+            <div>
+              <strong>Operator action needed</strong>
+              <p id="operator-message"></p>
+            </div>
+            <div class="operator-actions">
+              <button id="takeover-step" class="primary" type="button">Take over</button>
+              <button id="resume-automation" type="button">Resume automation</button>
+            </div>
+          </div>
+        </section>
+
+        <details class="advanced-panel hidden">
+          <summary>Developer details</summary>
+
+          <div class="header-actions">
+            <button id="copy-codex-command" type="button">Copy Codex Pickup Command</button>
+            <button id="simulate-automation" class="primary" type="button">Simulate Successful Automation</button>
+            <button id="needs-operator" type="button">Simulate Operator Need</button>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Run sections">
+            <button class="tab active" type="button" data-tab="workflow">Automation</button>
+            <button class="tab" type="button" data-tab="captured">Captured IDs</button>
+            <button class="tab" type="button" data-tab="snippets">Snippets</button>
+            <button class="tab" type="button" data-tab="yamix">Yamix</button>
+            <button class="tab" type="button" data-tab="summary">Summary</button>
+          </div>
+
+          <section id="tab-workflow" class="tab-panel">
+            <div id="workflow-list" class="workflow-list"></div>
+          </section>
+
+          <section id="tab-captured" class="tab-panel hidden">
+            <form id="captured-form" class="form-grid"></form>
+          </section>
+
+          <section id="tab-snippets" class="tab-panel hidden">
+            <div class="snippet-grid">
+              <article>
+                <div class="card-head">
+                  <h2>GSC HFCM HTML snippet</h2>
+                  <button type="button" class="copy-button" data-copy="gscSnippet">Copy</button>
+                </div>
+                <pre id="gsc-snippet"></pre>
+              </article>
+              <article>
+                <div class="card-head">
+                  <h2>GA4 HFCM Javascript snippet</h2>
+                  <button type="button" class="copy-button" data-copy="ga4Snippet">Copy</button>
+                </div>
+                <pre id="ga4-snippet"></pre>
+              </article>
+            </div>
+          </section>
+
+          <section id="tab-yamix" class="tab-panel hidden">
+            <div class="yamix-grid" id="yamix-fields"></div>
+          </section>
+
+          <section id="tab-summary" class="tab-panel hidden">
+              <div class="card-head">
+                <h2>Final run summary</h2>
+                <button type="button" class="copy-button" data-copy="summary">Copy</button>
+              </div>
+            <pre id="summary-output"></pre>
+          </section>
+        </details>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
