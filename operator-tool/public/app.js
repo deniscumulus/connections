@@ -287,10 +287,10 @@ function automationFor(run) {
 function credentialRows(run) {
   const credentials = run.credentials || {};
   return [
-    ["Google", credentials.google?.email || run.googleEmail, credentials.google?.passwordProvided],
-    ["ManageWP", credentials.manageWp?.username || "", credentials.manageWp?.passwordProvided],
-    ["Yamix", credentials.yamix?.username || "", credentials.yamix?.passwordProvided],
-    ["SE Ranking", credentials.seRanking?.username || "", credentials.seRanking?.passwordProvided]
+    ["Google", credentials.google?.email || run.googleEmail, "Password stored server-side"],
+    ["ManageWP", "Global account", "Stored server-side"],
+    ["Yamix", "Global account", "Stored server-side"],
+    ["SE Ranking", "Global account", "Stored server-side"]
   ];
 }
 
@@ -366,7 +366,7 @@ function summaryText(run) {
     `Current step: ${automation.currentStep || ""}`,
     "",
     "Credentials",
-    ...credentialRows(run).map(([service, username, provided]) => `- ${service}: ${username || "not set"} (${provided ? "password provided" : "password missing"})`),
+    ...credentialRows(run).map(([service, username, status]) => `- ${service}: ${username || "not set"} (${status})`),
     "",
     "Google Analytics",
     `- Property ID: ${run.captured.ga4PropertyId}`,
@@ -444,10 +444,10 @@ function renderCaptured(run) {
   const credentialSummary = `<div class="full credential-summary">
     <h2>Credential status</h2>
     <div class="credential-grid">
-      ${credentialRows(run).map(([service, username, provided]) => `<div>
+      ${credentialRows(run).map(([service, username, status]) => `<div>
         <span>${escapeHtml(service)}</span>
         <strong>${escapeHtml(username || "Not set")}</strong>
-        <em>${provided ? "Password provided for this run" : "Password missing"}</em>
+        <em>${escapeHtml(status)}</em>
       </div>`).join("")}
     </div>
   </div>`;
@@ -618,19 +618,16 @@ function initialAutomationPatch(raw) {
     credentials: {
       google: {
         email: String(raw.googleEmail || "").trim(),
-        passwordProvided: Boolean(raw.googlePassword)
+        source: "server"
       },
       manageWp: {
-        username: String(raw.manageWpUsername || "").trim(),
-        passwordProvided: Boolean(raw.manageWpPassword)
+        source: "server"
       },
       yamix: {
-        username: String(raw.yamixUsername || "").trim(),
-        passwordProvided: Boolean(raw.yamixPassword)
+        source: "server"
       },
       seRanking: {
-        username: String(raw.seRankingUsername || "").trim(),
-        passwordProvided: Boolean(raw.seRankingPassword)
+        source: "server"
       }
     },
     steps: {

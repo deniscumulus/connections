@@ -12,6 +12,16 @@ This is a Vercel-compatible conversion of the original Docker/VPS prototype.
 
 This mode is best for one operator in one browser. Runs are not shared across users, devices, or browsers. For team-wide persistence, replace the local storage adapter with Vercel Postgres, KV, Blob, Supabase, Neon, or another real database.
 
+## Credentials
+
+The app does not ask for service passwords in the frontend. Store real credentials only as Vercel server-side environment variables.
+
+See:
+
+```text
+SERVER_CREDENTIALS.md
+```
+
 ## Local preview
 
 ```bash

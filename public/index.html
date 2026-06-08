@@ -56,38 +56,9 @@
           SE Ranking branded keywords
           <textarea name="seRankingKeywords" placeholder="Optional. One keyword per line. Blank means the tool auto-generates 5 branded keywords."></textarea>
         </label>
-        <details class="credential-panel">
-          <summary>Credentials for this run</summary>
-          <p>Prototype records whether a password was provided, but does not save password values.</p>
-          <label>
-            Gmail password
-            <input name="googlePassword" type="password" autocomplete="new-password" placeholder="Used for GA4 and GSC" />
-          </label>
-          <label>
-            ManageWP email
-            <input name="manageWpUsername" autocomplete="username" placeholder="managewp@example.com" />
-          </label>
-          <label>
-            ManageWP password
-            <input name="manageWpPassword" type="password" autocomplete="new-password" />
-          </label>
-          <label>
-            Yamix email
-            <input name="yamixUsername" autocomplete="username" placeholder="yamix@example.com" />
-          </label>
-          <label>
-            Yamix password
-            <input name="yamixPassword" type="password" autocomplete="new-password" />
-          </label>
-          <label>
-            SE Ranking email
-            <input name="seRankingUsername" autocomplete="username" placeholder="seranking@example.com" />
-          </label>
-          <label>
-            SE Ranking password
-            <input name="seRankingPassword" type="password" autocomplete="new-password" />
-          </label>
-        </details>
+        <div class="server-credentials-note">
+          Service credentials are configured on the server.
+        </div>
         <div id="form-error" class="form-error hidden"></div>
         <button class="primary" type="submit">Create Run & Start</button>
       </form>

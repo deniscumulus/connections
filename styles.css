@@ -187,6 +187,15 @@ button.icon-button {
   margin-top: 10px;
 }
 
+.server-credentials-note {
+  border: 1px solid #c7d7ff;
+  background: #f2f6ff;
+  color: #29406f;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
 .form-error {
   border: 1px solid #efb0ac;
   background: #fff1f0;
