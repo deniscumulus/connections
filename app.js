@@ -43,7 +43,7 @@ const stepMeta = [
   {
     key: "seRanking",
     title: "SE Ranking",
-    text: "Automation creates the SE Ranking project using the market/language read from Yamix, adds custom branded keywords or 5 generated branded keywords, connects GA4 and GSC, then captures IDs.",
+    text: "Automation creates the SE Ranking project using the target market from the run and language read from Yamix, adds custom branded keywords or 5 generated branded keywords, connects GA4 and GSC, then captures IDs.",
     links: [{ label: "Open SE Ranking", href: "https://online.seranking.com/login.html" }]
   },
   {
@@ -393,6 +393,7 @@ function applyLocalDerived(run) {
     ...(run.defaults || {})
   };
   run.steps = { ...defaultLocalSteps(), ...(run.steps || {}) };
+  run.targetMarket = run.targetMarket || run.market || "";
 
   run.defaults.seRankingKeywords = brandedLocalKeywords({
     hostname: run.hostname,
@@ -423,6 +424,7 @@ function buildLocalRun(input) {
   const siteUrl = normalizeLocalUrl(input.siteUrl || input.domain || "");
   const hostname = domainFromLocalUrl(siteUrl);
   const projectName = (input.projectName || domainForLocalDataset(hostname)).trim();
+  const targetMarket = (input.targetMarket || input.market || "").trim();
   const bigQueryProjectId = (input.ga4BigQueryProjectId || "").trim() || DEFAULT_BIGQUERY_PROJECT_ID;
   const now = new Date().toISOString();
 
@@ -434,7 +436,8 @@ function buildLocalRun(input) {
     siteUrl,
     hostname,
     googleEmail: (input.googleEmail || "").trim(),
-    market: "",
+    targetMarket,
+    market: targetMarket,
     language: "",
     defaults: {
       yamixParentProject: "SKY Rocket",
@@ -706,6 +709,7 @@ function summaryText(run) {
   return [
     `Project: ${run.projectName}`,
     `Site URL: ${run.siteUrl}`,
+    `Target market: ${run.targetMarket || run.market || "not set"}`,
     `Google email: ${run.googleEmail}`,
     `Yamix market: ${run.captured.yamixExistingMarket || "read from existing Yamix project"}`,
     `Yamix language: ${run.captured.yamixExistingLanguage || "read from existing Yamix project"}`,
@@ -739,8 +743,9 @@ function summaryText(run) {
     "SE Ranking",
     `- Project ID: ${run.captured.seRankingProjectId}`,
     `- Backlinks Report ID: ${run.captured.seRankingBacklinksReportId}`,
+    `- Target market: ${run.targetMarket || run.market || "not set"}`,
     `- Branded keywords: ${keywords.length ? keywords.join(", ") : "none"}`,
-    `- Market/language source: existing Yamix project`,
+    `- Language source: existing Yamix project`,
     `- GA4 connected: ${run.confirmations.seRankingGa4Connected ? "yes" : "no"}`,
     `- GSC connected: ${run.confirmations.seRankingGscConnected ? "yes" : "no"}`,
     "",
@@ -868,7 +873,7 @@ function renderDetail() {
   els.empty.classList.add("hidden");
   els.detail.classList.remove("hidden");
   els.runTitle.textContent = run.projectName;
-  els.runSubtitle.textContent = `${run.siteUrl} | Yamix market/language | ${run.googleEmail || "No Google email"}`;
+  els.runSubtitle.textContent = `${run.siteUrl} | ${run.targetMarket || run.market || "No target market"} | ${run.googleEmail || "No Google email"}`;
 
   const progress = progressFor(run);
   els.progressText.textContent = `${progress.done}/${progress.total} completed`;
@@ -978,6 +983,7 @@ function initialAutomationPatch(raw) {
         source: "server"
       }
     },
+    targetMarket: String(raw.targetMarket || "").trim(),
     steps: {
       inputs: { status: "done", note: "Intake form submitted." },
       yamix: { status: "in_progress", note: "Find existing Yamix project and read market/language." },
@@ -1068,18 +1074,20 @@ els.form.addEventListener("submit", async (event) => {
   const raw = Object.fromEntries(formData.entries());
   const missing = [];
   if (!String(raw.siteUrl || "").trim()) missing.push("Site URL");
+  if (!String(raw.targetMarket || "").trim()) missing.push("Target market");
   if (!String(raw.googleEmail || "").trim()) missing.push("Google email");
   if (!String(raw.googlePassword || "").trim()) missing.push("Gmail password");
   if (missing.length) {
     setFormError(`Required before start: ${missing.join(", ")}`);
     showToast("Missing required fields");
-    els.form.querySelector("[name='siteUrl'], [name='googleEmail'], [name='googlePassword']")?.focus();
+    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='googleEmail'], [name='googlePassword']")?.focus();
     return;
   }
   setFormError("");
   const payload = {
     siteUrl: raw.siteUrl,
     projectName: raw.projectName,
+    targetMarket: raw.targetMarket,
     googleEmail: raw.googleEmail,
     googlePassword: raw.googlePassword,
     seRankingKeywords: raw.seRankingKeywords

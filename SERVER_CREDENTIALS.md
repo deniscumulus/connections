@@ -32,7 +32,8 @@ The current Vercel version is a static UI with `localStorage` run persistence. T
 When a backend/worker is added, it should:
 
 1. Read ManageWP, Yamix, and SE Ranking credentials from Vercel environment variables.
-2. Read the run's Gmail email/password from the submitted run payload.
-3. Use the Gmail credentials only for GA4/GSC login during that run.
-4. Clear or encrypt any temporary secret storage after the run finishes.
-5. Return only status/captured IDs to the frontend, never secret values.
+2. Read the run's target market and Gmail email/password from the submitted run payload.
+3. Use the target market for market-specific setup, especially SE Ranking.
+4. Use the Gmail credentials only for GA4/GSC login during that run.
+5. Clear or encrypt any temporary secret storage after the run finishes.
+6. Return only status/captured IDs to the frontend, never secret values.
