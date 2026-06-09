@@ -13,7 +13,7 @@ const stepMeta = [
   {
     key: "inputs",
     title: "Inputs",
-    text: "Run created from the intake form. Credentials are checked without storing password values in the prototype.",
+    text: "Run created from the intake form. Gmail credentials are provided per run; global service credentials stay server-side.",
     links: []
   },
   {
@@ -287,7 +287,7 @@ function automationFor(run) {
 function credentialRows(run) {
   const credentials = run.credentials || {};
   return [
-    ["Google", credentials.google?.email || run.googleEmail, "Password stored server-side"],
+    ["Google", credentials.google?.email || run.googleEmail, credentials.google?.password ? "Password provided for this run" : "Password missing"],
     ["ManageWP", "Global account", "Stored server-side"],
     ["Yamix", "Global account", "Stored server-side"],
     ["SE Ranking", "Global account", "Stored server-side"]
@@ -618,7 +618,8 @@ function initialAutomationPatch(raw) {
     credentials: {
       google: {
         email: String(raw.googleEmail || "").trim(),
-        source: "server"
+        password: String(raw.googlePassword || ""),
+        source: "run_form"
       },
       manageWp: {
         source: "server"
@@ -721,10 +722,11 @@ els.form.addEventListener("submit", async (event) => {
   const missing = [];
   if (!String(raw.siteUrl || "").trim()) missing.push("Site URL");
   if (!String(raw.googleEmail || "").trim()) missing.push("Google email");
+  if (!String(raw.googlePassword || "").trim()) missing.push("Gmail password");
   if (missing.length) {
     setFormError(`Required before start: ${missing.join(", ")}`);
     showToast("Missing required fields");
-    els.form.querySelector("[name='siteUrl'], [name='googleEmail']")?.focus();
+    els.form.querySelector("[name='siteUrl'], [name='googleEmail'], [name='googlePassword']")?.focus();
     return;
   }
   setFormError("");
@@ -732,6 +734,7 @@ els.form.addEventListener("submit", async (event) => {
     siteUrl: raw.siteUrl,
     projectName: raw.projectName,
     googleEmail: raw.googleEmail,
+    googlePassword: raw.googlePassword,
     seRankingKeywords: raw.seRankingKeywords
   };
   const run = await api("/api/runs", {

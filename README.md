@@ -14,7 +14,7 @@ This mode is best for one operator in one browser. Runs are not shared across us
 
 ## Credentials
 
-The app does not ask for service passwords in the frontend. Store real credentials only as Vercel server-side environment variables.
+The app asks for Gmail email/password per run because those change by site. Global service credentials for ManageWP, Yamix, and SE Ranking should stay server-side as Vercel environment variables.
 
 See:
 

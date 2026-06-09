@@ -1,8 +1,8 @@
 # Server Credentials
 
-Do not put real credentials in GitHub, frontend files, `localStorage`, or run notes.
+Do not put global service credentials in GitHub, frontend files, `localStorage`, or run notes.
 
-For the current Vercel project, store credentials in:
+For the current Vercel project, store global service credentials in:
 
 ```text
 Vercel > connections > Settings > Environment Variables
@@ -21,31 +21,18 @@ SERANKING_USERNAME
 SERANKING_PASSWORD
 ```
 
-Google/Gmail can change per site, so store a server-side map keyed by Gmail address:
+Google/Gmail changes per site, so the operator enters the Gmail email and Gmail password in the run form. The frontend should mask the password field and never print the value in summaries or logs.
 
-```text
-GOOGLE_ACCOUNTS_JSON
-```
-
-Example shape:
-
-```json
-{
-  "first-client@gmail.com": "password-for-that-account",
-  "second-client@gmail.com": "password-for-that-account"
-}
-```
-
-The app still asks for `Google email` on each run because that is site-specific. It should not ask for the password in the frontend.
+In the current static prototype, run data is stored in the browser's `localStorage`, so Gmail passwords entered for test runs live in that browser storage. In the production backend version, send the Gmail password directly to the worker/API and avoid storing it after the run finishes.
 
 ## Important
 
-The current Vercel version is a static UI with `localStorage` run persistence. These environment variables are for the next backend/worker layer. Frontend JavaScript must never read or expose them.
+The current Vercel version is a static UI with `localStorage` run persistence. These environment variables are for the next backend/worker layer. Frontend JavaScript must never read or expose global service credentials.
 
 When a backend/worker is added, it should:
 
-1. Read global service credentials from Vercel environment variables.
-2. Read the run's Google email.
-3. Look up that Google email in `GOOGLE_ACCOUNTS_JSON`.
-4. Use the credentials only server-side.
-5. Return only status/captured IDs to the frontend, never the secret values.
+1. Read ManageWP, Yamix, and SE Ranking credentials from Vercel environment variables.
+2. Read the run's Gmail email/password from the submitted run payload.
+3. Use the Gmail credentials only for GA4/GSC login during that run.
+4. Clear or encrypt any temporary secret storage after the run finishes.
+5. Return only status/captured IDs to the frontend, never secret values.
