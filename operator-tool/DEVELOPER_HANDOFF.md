@@ -100,6 +100,8 @@ This is the main product gap. A plain web page cannot control Google Analytics, 
 
 The user expectation is not that operators manually create GA4/GSC/SE Ranking/Yamix after clicking `Create Run`. The expected final behavior is that `Create Run` starts the automation job.
 
+Important cost requirement: the backend worker must be deterministic. Do not use Codex/AI as the normal worker for every run. A normal successful run should use 0 AI model calls. Use API calls and Playwright selectors first; reserve AI only for rare exception recovery after deterministic automation fails. See `../LOW_CREDIT_AUTOMATION.md`.
+
 ## Production Architecture Recommendation
 
 Use:

@@ -10,6 +10,7 @@ The current local app is only a prototype/control panel. The final tool must aut
 2. Operator fills the first form:
    - Domain / site URL
    - Project name
+   - Target market
    - Google/Gmail account for GA4 and GSC
    - Optional SE Ranking branded keywords
 3. Operator clicks `Create Run`.
@@ -28,6 +29,7 @@ Per site:
 
 - Domain / site URL
 - Project name
+- Target market
 - Gmail address used for Google Analytics and Google Search Console
 - Gmail password, if not already saved in the secure credential vault
 - SE Ranking branded keywords, optional; blank means auto-generate 5 branded keywords from the project/domain

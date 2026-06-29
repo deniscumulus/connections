@@ -99,4 +99,6 @@ The first hosted version must be guided browser automation, not just a manual ch
 - App generates snippets and Yamix fields.
 - App stores run status.
 
+Cost requirement: the browser worker must be deterministic and should not call Codex/AI on the normal path. Normal runs should use 0 AI model calls. Use AI only for rare selector/UI recovery and then convert the learned fix back into code/config.
+
 Then V2 can harden the click-through steps, error recovery, and resume behavior.

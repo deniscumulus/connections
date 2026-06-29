@@ -113,7 +113,7 @@ const els = {
   resumeAutomation: document.querySelector("#resume-automation"),
   simulateAutomation: document.querySelector("#simulate-automation"),
   needsOperator: document.querySelector("#needs-operator"),
-  copyCodexCommand: document.querySelector("#copy-codex-command"),
+  copyWorkerPayload: document.querySelector("#copy-worker-payload"),
   workflowList: document.querySelector("#workflow-list"),
   capturedForm: document.querySelector("#captured-form"),
   gscSnippet: document.querySelector("#gsc-snippet"),
@@ -219,14 +219,15 @@ function setFormError(message) {
 function statusClass(status) {
   if (status === "done" || status === "simulated_done") return "done";
   if (status === "blocked" || status === "needs_operator" || status === "failed") return "blocked";
-  if (status === "in_progress" || status === "running" || status === "queued" || status === "queued_for_codex" || status === "waiting_for_worker") return "in-progress";
+  if (status === "in_progress" || status === "running" || status === "queued" || status === "queued_for_worker" || status === "queued_for_codex" || status === "waiting_for_worker") return "in-progress";
   return "";
 }
 
 function statusLabel(status) {
   return {
     todo: "Todo",
-    queued_for_codex: "Queued for Codex",
+    queued_for_worker: "Queued for worker",
+    queued_for_codex: "Queued for worker",
     queued: "Queued",
     running: "Running",
     waiting_for_worker: "Waiting for worker",
@@ -277,10 +278,10 @@ function needsOperator(run) {
 
 function automationFor(run) {
   return run.automation || {
-    status: "queued_for_codex",
+    status: "queued_for_worker",
     currentStep: "yamix",
-    message: "Queued for Codex pickup from this local web app.",
-    worker: "codex_thread"
+    message: "Queued for the deterministic backend worker.",
+    worker: "backend_worker"
   };
 }
 
@@ -356,6 +357,7 @@ function keywordList(run) {
 function summaryText(run) {
   const automation = automationFor(run);
   const keywords = keywordList(run);
+  const metrics = run.metrics || {};
   return [
     `Project: ${run.projectName}`,
     `Site URL: ${run.siteUrl}`,
@@ -365,6 +367,13 @@ function summaryText(run) {
     `Yamix language: ${run.captured.yamixExistingLanguage || "read from existing Yamix project"}`,
     `Automation status: ${statusLabel(automation.status)}`,
     `Current step: ${automation.currentStep || ""}`,
+    "",
+    "Cost metrics",
+    `- Model calls: ${metrics.modelCalls ?? 0}`,
+    `- AI recovery used: ${metrics.aiRecoveryUsed ? "yes" : "no"}`,
+    `- Browser steps: ${metrics.browserSteps ?? 0}`,
+    `- API calls: ${metrics.apiCalls ?? 0}`,
+    `- Operator takeovers: ${metrics.operatorTakeovers ?? 0}`,
     "",
     "Credentials",
     ...credentialRows(run).map(([service, username, status]) => `- ${service}: ${username || "not set"} (${status})`),
@@ -611,11 +620,11 @@ function initialAutomationPatch(raw) {
   const timestamp = nowIso();
   return {
     automation: {
-      status: "queued_for_codex",
-      worker: "codex_thread",
+      status: "queued_for_worker",
+      worker: "backend_worker",
       currentStep: "yamix",
       startedAt: timestamp,
-      message: "Create Run received. This run is queued for Codex to perform the setup from the current chat."
+      message: "Create Run received. This run is queued for the deterministic backend worker."
     },
     credentials: {
       google: {
@@ -634,6 +643,13 @@ function initialAutomationPatch(raw) {
       }
     },
     targetMarket: String(raw.targetMarket || "").trim(),
+    metrics: {
+      modelCalls: 0,
+      aiRecoveryUsed: false,
+      browserSteps: 0,
+      apiCalls: 0,
+      operatorTakeovers: 0
+    },
     steps: {
       inputs: { status: "done", note: "Intake form submitted." },
       yamix: { status: "in_progress", note: "Find existing Yamix project and read market/language." },
@@ -647,7 +663,7 @@ function initialAutomationPatch(raw) {
       {
         at: timestamp,
         level: "info",
-        message: "Run created and queued for Codex pickup."
+        message: "Run created and queued for backend worker pickup."
       }
     ]
   };
@@ -701,6 +717,13 @@ function simulationPatch(run) {
       yamixExistingProjectFound: true,
       yamixUpdated: true,
       yamixCreated: false
+    },
+    metrics: {
+      modelCalls: 0,
+      aiRecoveryUsed: false,
+      browserSteps: 26,
+      apiCalls: 4,
+      operatorTakeovers: run.metrics?.operatorTakeovers || 0
     },
     steps: {
       inputs: { status: "done", note: "Intake form submitted." },
@@ -787,7 +810,11 @@ els.needsOperator.addEventListener("click", async () => {
     logs: [
       ...(run.logs || []),
       { at: timestamp, level: "warning", message: "Run marked as needing operator input." }
-    ]
+    ],
+    metrics: {
+      ...(run.metrics || {}),
+      operatorTakeovers: (run.metrics?.operatorTakeovers || 0) + 1
+    }
   });
   showToast("Marked as needing operator");
 });
@@ -817,7 +844,11 @@ els.takeoverStep.addEventListener("click", async () => {
     logs: [
       ...(run.logs || []),
       { at: timestamp, level: "warning", message: `Operator takeover started for ${step.title}.` }
-    ]
+    ],
+    metrics: {
+      ...(run.metrics || {}),
+      operatorTakeovers: (run.metrics?.operatorTakeovers || 0) + 1
+    }
   });
 });
 
@@ -849,11 +880,20 @@ els.resumeAutomation.addEventListener("click", async () => {
   showToast("Automation marked ready to resume");
 });
 
-els.copyCodexCommand.addEventListener("click", async () => {
+els.copyWorkerPayload.addEventListener("click", async () => {
   const run = activeRun();
   if (!run) return;
-  await navigator.clipboard.writeText(`Start queued setup run ${run.id}`);
-  showToast("Codex pickup command copied");
+  await navigator.clipboard.writeText(JSON.stringify({
+    runId: run.id,
+    projectName: run.projectName,
+    siteUrl: run.siteUrl,
+    targetMarket: run.targetMarket || run.market || "",
+    googleEmail: run.googleEmail,
+    automationStatus: automationFor(run).status,
+    worker: "backend_worker",
+    note: "Use the deterministic worker. Use AI/Codex only for exception recovery."
+  }, null, 2));
+  showToast("Worker payload copied");
 });
 
 els.runList.addEventListener("click", (event) => {
