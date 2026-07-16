@@ -631,8 +631,10 @@ function initialAutomationPatch(raw) {
     credentials: {
       google: {
         email: String(raw.googleEmail || "").trim(),
-        password: String(raw.googlePassword || ""),
         source: "run_form"
+      },
+      googlePassword: {
+        source: "server_env"
       },
       manageWp: {
         source: "server"
@@ -751,11 +753,10 @@ els.form.addEventListener("submit", async (event) => {
   if (!String(raw.siteUrl || "").trim()) missing.push("Site URL");
   if (!String(raw.targetMarket || "").trim()) missing.push("Target market");
   if (!String(raw.googleEmail || "").trim()) missing.push("Google email");
-  if (!String(raw.googlePassword || "").trim()) missing.push("Gmail password");
   if (missing.length) {
     setFormError(`Required before start: ${missing.join(", ")}`);
     showToast("Missing required fields");
-    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='googleEmail'], [name='googlePassword']")?.focus();
+    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='googleEmail']")?.focus();
     return;
   }
   setFormError("");
@@ -764,7 +765,6 @@ els.form.addEventListener("submit", async (event) => {
     projectName: raw.projectName,
     targetMarket: raw.targetMarket,
     googleEmail: raw.googleEmail,
-    googlePassword: raw.googlePassword,
     seRankingKeywords: raw.seRankingKeywords
   };
   const run = await api("/api/runs", {
