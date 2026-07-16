@@ -25,6 +25,23 @@ jobs:
           # EXCLUDE: Prevent wiping out active runtime data, logs, and the custom .env configuration
           EXCLUDE: "/data/"
           ARGS: "-rlgoDzvO --delete"
+      - name: Create .env file on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.OVH_SERVER_IP }}
+          username: "ubuntu"
+          key: ${{ secrets.OVH_SSH_KEY }}
+          script: |
+            cd /opt/portfolio-setup-operator
+            cat > .env << 'EOF'
+            GOOGLE_PASSWORD=${{ secrets.GOOGLE_PASSWORD }}
+            MANAGEWP_EMAIL=${{ secrets.MANAGEWP_EMAIL }}
+            MANAGEWP_PASSWORD=${{ secrets.MANAGEWP_PASSWORD }}
+            YAMIX_EMAIL=${{ secrets.YAMIX_EMAIL }}
+            YAMIX_PASSWORD=${{ secrets.YAMIX_PASSWORD }}
+            SERANKING_EMAIL=${{ secrets.SERANKING_EMAIL }}
+            SERANKING_PASSWORD=${{ secrets.SERANKING_PASSWORD }}
+            EOF
 
       - name: Rebuild and Restart Docker Container
         uses: appleboy/ssh-action@master
