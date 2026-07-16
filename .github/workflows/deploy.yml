@@ -33,6 +33,20 @@ jobs:
           key: ${{ secrets.OVH_SSH_KEY }}
           script: |
             cd /opt/portfolio-setup-operator
+            echo "GOOGLE_PASSWORD=${{ secrets.GPASS }}" > .env
+            echo "MANAGEWP_EMAIL=${{ secrets.WPMAIL }}" >> .env
+            echo "MANAGEWP_PASSWORD=${{ secrets.WPPASS }}" >> .env
+            echo "YAMIX_EMAIL=${{ secrets.YAMIXEMAIL }}" >> .env
+            echo "YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}" >> .env
+            echo "SERANKING_EMAIL=${{ secrets.SEEMAIL }}" >> .env
+            echo "SERANKING_PASSWORD=${{ secrets.SEPASS }}" >> .env
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.OVH_SERVER_IP }}
+          username: "ubuntu"
+          key: ${{ secrets.OVH_SSH_KEY }}
+          script: |
+            cd /opt/portfolio-setup-operator
             cat > .env << 'EOFENV'
             GOOGLE_PASSWORD=${{ secrets.GPASS }}
             MANAGEWP_EMAIL=${{ secrets.WPMAIL }}
