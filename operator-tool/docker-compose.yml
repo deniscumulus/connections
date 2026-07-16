@@ -2,6 +2,7 @@ services:
   portfolio-setup-operator:
     build: .
     restart: unless-stopped
+    env_file: .env
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -36,6 +37,7 @@ services:
     restart: unless-stopped
     depends_on:
       - portfolio-setup-operator
+    env_file: .env
     environment:
       WORKER_API_BASE: "http://portfolio-setup-operator:4173"
       PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
