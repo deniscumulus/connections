@@ -8,6 +8,8 @@ COPY worker.mjs ./
 COPY ga4-automation.mjs ./
 COPY gsc-automation.mjs ./
 COPY seranking-automation.mjs ./
+COPY managewp-automation.mjs ./
+COPY yamix-automation.mjs ./
 COPY public ./public
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

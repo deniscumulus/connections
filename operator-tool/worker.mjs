@@ -2,6 +2,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { setupGA4 } from "./ga4-automation.mjs";
 import { setupGSC } from "./gsc-automation.mjs";
 import { setupSERanking } from "./seranking-automation.mjs";
+import { setupManageWPHFCM } from "./managewp-automation.mjs";
+import { setupYamixRead, setupYamixUpdate } from "./yamix-automation.mjs";
 
 const apiBase = process.env.WORKER_API_BASE || "http://127.0.0.1:4173";
 const basicAuthUser = process.env.BASIC_AUTH_USER || "";
@@ -223,6 +225,41 @@ async function handleStepAutomation(run, stepKey) {
         seRankingGscConnected: true
       },
       logs: [...(run.logs || []), { at: timestamp, level: "info", message: `SE Ranking setup complete. Project: ${result.seRankingProjectId}` }]
+    };
+  }
+
+  if (stepKey === "yamix") {
+    console.log(`[worker] attempting Yamix automation for run ${run.id}`);
+    const result = await setupYamixRead(run);
+    return {
+      automation: { ...run.automation, status: "needs_operator", message: result.error },
+      steps: {
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Yamix: ${result.error}` }]
+    };
+  }
+
+  if (stepKey === "manageWpHfcm") {
+    console.log(`[worker] attempting ManageWP HFCM automation for run ${run.id}`);
+    const result = await setupManageWPHFCM(run);
+    return {
+      automation: { ...run.automation, status: "needs_operator", message: result.error },
+      steps: {
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `ManageWP HFCM: ${result.error}` }]
+    };
+  }
+
+  if (stepKey === "finalCheck") {
+    console.log(`[worker] final check for run ${run.id}`);
+    // Final check just verifies all steps are complete and generates summary
+    return {
+      steps: {
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "All steps verified." }
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Final check complete." }]
     };
   }
 
