@@ -91,25 +91,39 @@ async function processQueued() {
   console.log(`[worker] run ${run.id} needs operator at step "${stepKey}"`);
 }
 
-// Picks up runs the operator resumed (marked automation.status "running" after
-// completing a step). If the step is now done, advances to the next one.
+// Picks up runs the operator resumed (status "running"). Mark the current step
+// done, then advance to the next incomplete step (or mark all complete).
 async function processResumed() {
   const runs = await api("/api/runs");
   const resumed = runs.filter((run) => run.automation?.status === "running");
 
   for (const run of resumed) {
     const stepKey = run.automation.currentStep;
-    const stepDone = run.steps?.[stepKey]?.status === "done";
-    if (!stepDone) continue;
+    const timestamp = new Date().toISOString();
 
-    const next = firstIncompleteStep(run);
+    // Mark the step the operator just completed as done
+    const updated = await api(`/api/runs/${run.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        steps: {
+          [stepKey]: {
+            ...(run.steps?.[stepKey] || {}),
+            status: "done",
+            note: "Operator completed this step."
+          }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "info", message: `Worker: ${stepKey} marked done by operator.` }]
+      })
+    });
+
+    const next = firstIncompleteStep(updated);
     if (!next) {
-      await markComplete(run);
+      await markComplete(updated);
       console.log(`[worker] run ${run.id} complete`);
       continue;
     }
 
-    await flagNeedsOperator(run, next);
+    await flagNeedsOperator(updated, next);
     console.log(`[worker] run ${run.id} advanced to step "${next}"`);
   }
 }
