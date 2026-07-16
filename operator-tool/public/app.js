@@ -7,7 +7,7 @@ const state = {
 const DEFAULT_BIGQUERY_PROJECT_ID = "son-gcloud-452110-e8";
 const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
 const AUTH_SESSION_KEY = "connection_setup_authenticated";
-const ACCESS_CODE_HASH = "ec86d63cbe5fb15967ee3555ae3bc3ba9cc2cc4a6211be140b4bcff39f50689e";
+const ACCESS_CODE_HASH = "d6b3fc59ec4764be4b069fa49eef36a5bf9fa856eb10069f54668b598d6365ea";
 
 const stepMeta = [
   {
