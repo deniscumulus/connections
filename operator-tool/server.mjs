@@ -260,8 +260,8 @@ function buildRun(input) {
   const bigQueryProjectId = (input.ga4BigQueryProjectId || "").trim() || defaultBigQueryProjectId;
   const now = new Date().toISOString();
 
-  // Use server-side credentials, not user input
-  const googleEmail = credentials.googleEmail;
+  // Google email comes from form (per-run), password is from server env var
+  const googleEmail = (input.googleEmail || "").trim();
 
   return {
     id: randomUUID(),
