@@ -7,7 +7,7 @@ operator-tool/data/*.json
 .env
 .env.*
 !.env.example
-operator-tool/.env
+# operator-tool/.env is committed to repo for deployment
 operator-tool/.env.*
 !operator-tool/.env.example
 
