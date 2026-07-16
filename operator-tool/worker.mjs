@@ -1,5 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { setupGA4 } from "./ga4-automation.mjs";
+import { setupGSC } from "./gsc-automation.mjs";
+import { setupSERanking } from "./seranking-automation.mjs";
 
 const apiBase = process.env.WORKER_API_BASE || "http://127.0.0.1:4173";
 const basicAuthUser = process.env.BASIC_AUTH_USER || "";
@@ -141,6 +143,86 @@ async function handleStepAutomation(run, stepKey) {
         ga4BigQueryLinked: result.ga4BigQueryLinked
       },
       logs: [...(run.logs || []), { at: timestamp, level: "info", message: `GA4 setup complete. Property: ${result.ga4PropertyId}` }]
+    };
+  }
+
+  if (stepKey === "searchConsole") {
+    console.log(`[worker] attempting GSC automation for run ${run.id}`);
+    const result = await setupGSC(run);
+
+    if (result.needsOperator) {
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `GSC: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `GSC: ${result.error}` }]
+      };
+    }
+
+    if (!result.success) {
+      console.error(`[worker] GSC failed: ${result.error}`);
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `GSC error: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "error", message: `GSC error: ${result.error}` }]
+      };
+    }
+
+    console.log(`[worker] GSC succeeded for run ${run.id}`);
+    return {
+      steps: {
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: `GSC verified with content: ${result.gscVerificationContent.substring(0, 20)}...` }
+      },
+      captured: {
+        ...(run.captured || {}),
+        gscVerificationMetaTag: result.gscVerificationMetaTag,
+        gscVerificationContent: result.gscVerificationContent,
+        gscBulkDataExportDestination: result.gscBulkDataExportDestination,
+        gscBulkDataExportDatasetLocation: result.gscBulkDataExportDatasetLocation
+      },
+      confirmations: {
+        ...(run.confirmations || {}),
+        gscVerified: true,
+        gscBulkDataExportConfigured: result.gscBulkExportConfigured
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: `GSC setup complete. Verification content: ${result.gscVerificationContent.substring(0, 20)}...` }]
+    };
+  }
+
+  if (stepKey === "seRanking") {
+    console.log(`[worker] attempting SE Ranking automation for run ${run.id}`);
+    const result = await setupSERanking(run);
+
+    if (result.needsOperator || !result.success) {
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `SE Ranking: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `SE Ranking: ${result.error}` }]
+      };
+    }
+
+    console.log(`[worker] SE Ranking succeeded for run ${run.id}`);
+    return {
+      steps: {
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: `SE Ranking project: ${result.seRankingProjectId}` }
+      },
+      captured: {
+        ...(run.captured || {}),
+        seRankingProjectId: result.seRankingProjectId,
+        seRankingBacklinksReportId: result.seRankingBacklinksReportId
+      },
+      confirmations: {
+        ...(run.confirmations || {}),
+        seRankingCreated: true,
+        seRankingGa4Connected: true,
+        seRankingGscConnected: true
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: `SE Ranking setup complete. Project: ${result.seRankingProjectId}` }]
     };
   }
 
