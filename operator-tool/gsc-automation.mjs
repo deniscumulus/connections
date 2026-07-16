@@ -41,7 +41,7 @@ export async function setupGSC(run, googlePassword) {
   let browser;
   try {
     browser = await chromium.launch();
-    const context = await browser.createBrowserContext();
+    const context = await browser.newContext();
     const page = await context.newPage();
 
     if (!run.googleEmail || !googlePassword) {

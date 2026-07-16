@@ -37,7 +37,7 @@ export async function setupManageWPHFCM(run, managewpEmail, managewpPassword) {
     }
 
     browser = await chromium.launch();
-    const context = await browser.createBrowserContext();
+    const context = await browser.newContext();
     const page = await context.newPage();
 
     // 1. Login to ManageWP

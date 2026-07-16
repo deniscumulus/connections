@@ -39,7 +39,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     }
 
     browser = await chromium.launch();
-    const context = await browser.createBrowserContext();
+    const context = await browser.newContext();
     const page = await context.newPage();
 
     // 1. Login to Yamix
