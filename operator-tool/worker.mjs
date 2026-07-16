@@ -240,7 +240,7 @@ async function handleStepAutomation(run, stepKey) {
   }
 
   if (stepKey === "yamix") {
-    console.log(`[worker] attempting Yamix automation for run ${run.id}`);
+    console.log(`[worker] attempting Yamix read automation for run ${run.id}`);
     const result = await setupYamixRead(run);
     return {
       automation: { ...run.automation, status: "needs_operator", message: result.error },
@@ -253,24 +253,62 @@ async function handleStepAutomation(run, stepKey) {
 
   if (stepKey === "manageWpHfcm") {
     console.log(`[worker] attempting ManageWP HFCM automation for run ${run.id}`);
-    const result = await setupManageWPHFCM(run);
+    const result = await setupManageWPHFCM(run, credentials.managewpEmail, credentials.managewpPassword);
+
+    if (result.needsOperator || !result.success) {
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `ManageWP: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "error", message: `ManageWP HFCM: ${result.error}` }]
+      };
+    }
+
+    console.log(`[worker] ManageWP HFCM succeeded for run ${run.id}`);
     return {
-      automation: { ...run.automation, status: "needs_operator", message: result.error },
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "HFCM snippets created and verified" }
       },
-      logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `ManageWP HFCM: ${result.error}` }]
+      confirmations: {
+        ...(run.confirmations || {}),
+        hfcmSourceVerified: result.snippetsVerified
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "ManageWP HFCM snippets created and verified" }]
     };
   }
 
   if (stepKey === "finalCheck") {
-    console.log(`[worker] final check for run ${run.id}`);
-    // Final check just verifies all steps are complete and generates summary
+    console.log(`[worker] final check and Yamix update for run ${run.id}`);
+
+    // Update Yamix with all captured IDs
+    const yamixResult = await setupYamixUpdate(run, credentials.yamixEmail, credentials.yamixPassword);
+
+    if (yamixResult.needsOperator || !yamixResult.success) {
+      console.warn(`[worker] Yamix update had issues: ${yamixResult.error}`);
+      // Log but don't fail final check
+      return {
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: `All steps complete. Yamix update: ${yamixResult.error || "needs review"}` }
+        },
+        confirmations: {
+          ...(run.confirmations || {}),
+          yamixUpdated: false
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Yamix update: ${yamixResult.error || "needs operator review"}` }]
+      };
+    }
+
+    console.log(`[worker] Yamix updated successfully for run ${run.id}`);
     return {
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "All steps verified." }
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "All steps complete. Yamix project updated with all IDs." }
       },
-      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Final check complete." }]
+      confirmations: {
+        ...(run.confirmations || {}),
+        yamixUpdated: yamixResult.yamixUpdated
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Final check complete. Yamix project updated with GA4, GSC, SE Ranking IDs." }]
     };
   }
 
