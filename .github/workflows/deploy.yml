@@ -19,68 +19,26 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_KEY }}
           REMOTE_HOST: ${{ secrets.OVH_SERVER_IP }}
           REMOTE_USER: "ubuntu"
-          # SOURCE: Directs the sync to pull strictly from the subfolder in your repo
           SOURCE: "operator-tool/"
           TARGET: "/opt/portfolio-setup-operator"
-          # EXCLUDE: Prevent wiping out active runtime data, logs, and the custom .env configuration
           EXCLUDE: "/data/"
           ARGS: "-rlgoDzvO --delete"
-      - name:       - name: Create .env file on server
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.OVH_SERVER_IP }}
-          username: "ubuntu"
-          key: ${{ secrets.OVH_SSH_KEY }}
-          script: |
-            cd /opt/portfolio-setup-operator
-            echo "GOOGLE_PASSWORD=${{ secrets.GPASS }}" > .env
-            echo "MANAGEWP_EMAIL=${{ secrets.WPMAIL }}" >> .env
-            echo "MANAGEWP_PASSWORD=${{ secrets.WPPASS }}" >> .env
-            echo "YAMIX_EMAIL=${{ secrets.YAMIXEMAIL }}" >> .env
-            echo "YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}" >> .env
-            echo "SERANKING_EMAIL=${{ secrets.SEEMAIL }}" >> .env
-            echo "SERANKING_PASSWORD=${{ secrets.SEPASS }}" >> .env
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.OVH_SERVER_IP }}
-          username: "ubuntu"
-          key: ${{ secrets.OVH_SSH_KEY }}
-          script: |
-            cd /opt/portfolio-setup-operator
-            cat > .env << 'EOFENV'
-            GOOGLE_PASSWORD=${{ secrets.GPASS }}
-            MANAGEWP_EMAIL=${{ secrets.WPMAIL }}
-            MANAGEWP_PASSWORD=${{ secrets.WPPASS }}
-            YAMIX_EMAIL=${{ secrets.YAMIXEMAIL }}
-            YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}
-            SERANKING_EMAIL=${{ secrets.SEEMAIL }}
-            SERANKING_PASSWORD=${{ secrets.SEPASS }}
-            EOFENV
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.OVH_SERVER_IP }}
-          username: "ubuntu"
-          key: ${{ secrets.OVH_SSH_KEY }}
-          script: |
-            cd /opt/portfolio-setup-operator
-            cat > .env << 'EOF'
-            GOOGLE_PASSWORD=${{ secrets.GPASS }}
-MANAGEWP_EMAIL=${{ secrets.WPMAIL }}
-MANAGEWP_PASSWORD=${{ secrets.WPPASS }}
-YAMIX_EMAIL=${{ secrets.YAMIXEMAIL }}
-YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}
-SERANKING_EMAIL=${{ secrets.SEEMAIL }}
-SERANKING_PASSWORD=${{ secrets.SEPASS }}
-            EOF
 
       - name: Rebuild and Restart Docker Container
         uses: appleboy/ssh-action@master
+        env:
+          GOOGLE_PASSWORD: ${{ secrets.GPASS }}
+          MANAGEWP_EMAIL: ${{ secrets.WPMAIL }}
+          MANAGEWP_PASSWORD: ${{ secrets.WPPASS }}
+          YAMIX_EMAIL: ${{ secrets.YAMIXEMAIL }}
+          YAMIX_PASSWORD: ${{ secrets.YAMIXPASS }}
+          SERANKING_EMAIL: ${{ secrets.SEEMAIL }}
+          SERANKING_PASSWORD: ${{ secrets.SEPASS }}
         with:
           host: ${{ secrets.OVH_SERVER_IP }}
           username: "ubuntu"
           key: ${{ secrets.OVH_SSH_KEY }}
           script: |
             cd /opt/portfolio-setup-operator
-            # Rebuild using the freshly synced code files
             docker compose down
             docker compose up -d --build
