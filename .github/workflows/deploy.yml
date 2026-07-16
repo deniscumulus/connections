@@ -25,7 +25,23 @@ jobs:
           # EXCLUDE: Prevent wiping out active runtime data, logs, and the custom .env configuration
           EXCLUDE: "/data/"
           ARGS: "-rlgoDzvO --delete"
-      - name: Create .env file on server
+      - name:       - name: Create .env file on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.OVH_SERVER_IP }}
+          username: "ubuntu"
+          key: ${{ secrets.OVH_SSH_KEY }}
+          script: |
+            cd /opt/portfolio-setup-operator
+            cat > .env << 'EOFENV'
+            GOOGLE_PASSWORD=${{ secrets.GPASS }}
+            MANAGEWP_EMAIL=${{ secrets.WPMAIL }}
+            MANAGEWP_PASSWORD=${{ secrets.WPPASS }}
+            YAMIX_EMAIL=${{ secrets.YAMIXEMAIL }}
+            YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}
+            SERANKING_EMAIL=${{ secrets.SEEMAIL }}
+            SERANKING_PASSWORD=${{ secrets.SEPASS }}
+            EOFENV
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.OVH_SERVER_IP }}
