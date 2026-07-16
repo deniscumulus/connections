@@ -34,13 +34,13 @@ jobs:
           script: |
             cd /opt/portfolio-setup-operator
             cat > .env << 'EOF'
-            GOOGLE_PASSWORD=${{ secrets.GOOGLE_PASSWORD }}
-            MANAGEWP_EMAIL=${{ secrets.MANAGEWP_EMAIL }}
-            MANAGEWP_PASSWORD=${{ secrets.MANAGEWP_PASSWORD }}
-            YAMIX_EMAIL=${{ secrets.YAMIX_EMAIL }}
-            YAMIX_PASSWORD=${{ secrets.YAMIX_PASSWORD }}
-            SERANKING_EMAIL=${{ secrets.SERANKING_EMAIL }}
-            SERANKING_PASSWORD=${{ secrets.SERANKING_PASSWORD }}
+            GOOGLE_PASSWORD=${{ secrets.GPASS }}
+MANAGEWP_EMAIL=${{ secrets.WPMAIL }}
+MANAGEWP_PASSWORD=${{ secrets.WPPASS }}
+YAMIX_EMAIL=${{ secrets.YAMIXEMAIL }}
+YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}
+SERANKING_EMAIL=${{ secrets.SEEMAIL }}
+SERANKING_PASSWORD=${{ secrets.SEPASS }}
             EOF
 
       - name: Rebuild and Restart Docker Container
