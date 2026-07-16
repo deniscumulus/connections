@@ -20,3 +20,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  portfolio-setup-worker:
+    build: .
+    command: ["node", "worker.mjs"]
+    restart: unless-stopped
+    depends_on:
+      - portfolio-setup-operator
+    environment:
+      WORKER_API_BASE: "http://portfolio-setup-operator:4173"
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
+      WORKER_POLL_INTERVAL_MS: "15000"

@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package.json ./
 COPY server.mjs ./
+COPY worker.mjs ./
 COPY public ./public
 
 RUN mkdir -p /app/data && chown -R node:node /app
