@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { setupGA4 } from "./ga4-automation.mjs";
 
 const apiBase = process.env.WORKER_API_BASE || "http://127.0.0.1:4173";
 const basicAuthUser = process.env.BASIC_AUTH_USER || "";
@@ -91,6 +92,68 @@ async function processQueued() {
   console.log(`[worker] run ${run.id} needs operator at step "${stepKey}"`);
 }
 
+// Handle step automation (GA4, GSC, etc). Returns updated run or null if needs operator pause.
+async function handleStepAutomation(run, stepKey) {
+  const timestamp = new Date().toISOString();
+
+  if (stepKey === "googleAnalytics") {
+    console.log(`[worker] attempting GA4 automation for run ${run.id}`);
+    const result = await setupGA4(run);
+
+    if (result.needsOperator) {
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `GA4: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `GA4: ${result.error}` }]
+      };
+    }
+
+    if (!result.success) {
+      console.error(`[worker] GA4 failed: ${result.error}`);
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `GA4 error: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "error", message: `GA4 error: ${result.error}` }]
+      };
+    }
+
+    // GA4 succeeded, capture the IDs
+    console.log(`[worker] GA4 succeeded for run ${run.id}: propertyId=${result.ga4PropertyId}`);
+    return {
+      steps: {
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: `GA4 Property ID: ${result.ga4PropertyId}` }
+      },
+      captured: {
+        ...(run.captured || {}),
+        ga4PropertyId: result.ga4PropertyId,
+        ga4WebStreamId: result.ga4WebStreamId,
+        ga4MeasurementId: result.ga4MeasurementId,
+        ga4BigQueryProjectId: result.ga4BigQueryProjectId,
+        bigQueryDatasetLocation: result.bigQueryDatasetLocation
+      },
+      confirmations: {
+        ...(run.confirmations || {}),
+        ga4Created: true,
+        ga4BigQueryLinked: result.ga4BigQueryLinked
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: `GA4 setup complete. Property: ${result.ga4PropertyId}` }]
+    };
+  }
+
+  // For unimplemented steps, flag as needing operator
+  return {
+    automation: { ...run.automation, status: "needs_operator", currentStep: stepKey },
+    steps: {
+      [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: `Automation for "${STEP_LABEL[stepKey]}" not implemented yet.` }
+    },
+    logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Worker: step "${stepKey}" needs operator action.` }]
+  };
+}
+
 // Picks up runs the operator resumed (status "running"). Mark the current step
 // done, then advance to the next incomplete step (or mark all complete).
 async function processResumed() {
@@ -123,8 +186,26 @@ async function processResumed() {
       continue;
     }
 
-    await flagNeedsOperator(updated, next);
-    console.log(`[worker] run ${run.id} advanced to step "${next}"`);
+    // Try to automate the next step
+    const stepUpdate = await handleStepAutomation(updated, next);
+    const patch = {
+      automation: stepUpdate.automation,
+      steps: stepUpdate.steps,
+      logs: stepUpdate.logs,
+      ...(stepUpdate.captured && { captured: stepUpdate.captured }),
+      ...(stepUpdate.confirmations && { confirmations: stepUpdate.confirmations })
+    };
+
+    await api(`/api/runs/${run.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    });
+
+    if (stepUpdate.automation?.status === "needs_operator") {
+      console.log(`[worker] run ${run.id} paused at step "${next}" for operator`);
+    } else {
+      console.log(`[worker] run ${run.id} automated step "${next}"`);
+    }
   }
 }
 
