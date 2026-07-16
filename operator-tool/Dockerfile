@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install
 
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=false
-RUN cd /app && npm exec -- playwright install --with-deps chromium
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+RUN mkdir -p /app/.playwright && npm exec -- playwright install --with-deps chromium
 
 RUN mkdir -p /app/data && chown -R node:node /app
 

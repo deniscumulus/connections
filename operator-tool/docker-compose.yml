@@ -7,6 +7,7 @@ services:
       HOST: 0.0.0.0
       PORT: 4173
       DATA_DIR: /app/data
+      PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
       BASIC_AUTH_USER: ${BASIC_AUTH_USER}
       BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
       BIGQUERY_CLOUD_PROJECT_ID: "${BIGQUERY_CLOUD_PROJECT_ID:-son-gcloud-452110-e8}"
@@ -37,6 +38,7 @@ services:
       - portfolio-setup-operator
     environment:
       WORKER_API_BASE: "http://portfolio-setup-operator:4173"
+      PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
       BASIC_AUTH_USER: ${BASIC_AUTH_USER}
       BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
       WORKER_POLL_INTERVAL_MS: "15000"
