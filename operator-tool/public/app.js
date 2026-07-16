@@ -7,7 +7,7 @@ const state = {
 const DEFAULT_BIGQUERY_PROJECT_ID = "son-gcloud-452110-e8";
 const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
 const AUTH_SESSION_KEY = "connection_setup_authenticated";
-const ACCESS_CODE_HASH = "d6b3fc59ec4764be4b069fa49eef36a5bf9fa856eb10069f54668b598d6365ea";
+const ACCESS_CODE = "operatorcumuluseo";
 
 const stepMeta = [
   {
@@ -162,13 +162,15 @@ async function initAuth() {
 
 els.loginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+
   const accessCode = String(els.loginAccessCode?.value || "").trim();
-  const hash = await sha256Hex(accessCode);
-  if (hash !== ACCESS_CODE_HASH) {
+
+  if (accessCode !== ACCESS_CODE) {
     showLogin("Access code is not correct.");
     els.loginAccessCode.value = "";
     return;
   }
+
   window.sessionStorage.setItem(AUTH_SESSION_KEY, "1");
   els.loginAccessCode.value = "";
   await showApp();
