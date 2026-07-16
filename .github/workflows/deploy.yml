@@ -23,7 +23,7 @@ jobs:
           SOURCE: "operator-tool/"
           TARGET: "/opt/portfolio-setup-operator"
           # EXCLUDE: Prevent wiping out active runtime data, logs, and the custom .env configuration
-          EXCLUDE: "/data/, .env, .env.local"
+          EXCLUDE: "/data/"
           ARGS: "-rlgoDzvO --delete"
 
       - name: Rebuild and Restart Docker Container
