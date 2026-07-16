@@ -22,8 +22,8 @@ jobs:
           # SOURCE: Directs the sync to pull strictly from the subfolder in your repo
           SOURCE: "operator-tool/"
           TARGET: "/opt/portfolio-setup-operator"
-          # EXCLUDE: We prevent wiping out the active runtime ./data directory on the server
-          EXCLUDE: "/data/"
+          # EXCLUDE: Prevent wiping out active runtime data, logs, and the custom .env configuration
+          EXCLUDE: "/data/, .env, .env.local"
           ARGS: "-rlgoDzvO --delete"
 
       - name: Rebuild and Restart Docker Container
