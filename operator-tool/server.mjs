@@ -16,6 +16,18 @@ const basicAuthPassword = process.env.BASIC_AUTH_PASSWORD || "";
 const defaultBigQueryProjectId = process.env.BIGQUERY_CLOUD_PROJECT_ID || "son-gcloud-452110-e8";
 const defaultBigQueryDataLocation = process.env.BIGQUERY_DATA_LOCATION || "Frankfurt (europe-west3)";
 
+// Server-side credentials (never exposed to client)
+const credentials = {
+  googleEmail: process.env.GOOGLE_EMAIL || "",
+  googlePassword: process.env.GOOGLE_PASSWORD || "",
+  managewpEmail: process.env.MANAGEWP_EMAIL || "",
+  managewpPassword: process.env.MANAGEWP_PASSWORD || "",
+  yamixEmail: process.env.YAMIX_EMAIL || "",
+  yamixPassword: process.env.YAMIX_PASSWORD || "",
+  seRankingEmail: process.env.SERANKING_EMAIL || "",
+  seRankingPassword: process.env.SERANKING_PASSWORD || ""
+};
+
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -248,6 +260,9 @@ function buildRun(input) {
   const bigQueryProjectId = (input.ga4BigQueryProjectId || "").trim() || defaultBigQueryProjectId;
   const now = new Date().toISOString();
 
+  // Use server-side credentials, not user input
+  const googleEmail = credentials.googleEmail;
+
   return {
     id: randomUUID(),
     createdAt: now,
@@ -255,7 +270,7 @@ function buildRun(input) {
     projectName,
     siteUrl,
     hostname,
-    googleEmail: (input.googleEmail || "").trim(),
+    googleEmail,
     market: "",
     language: "",
     defaults: {

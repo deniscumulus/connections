@@ -10,6 +10,17 @@ const basicAuthUser = process.env.BASIC_AUTH_USER || "";
 const basicAuthPassword = process.env.BASIC_AUTH_PASSWORD || "";
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS || 15000);
 
+// Server-side credentials (loaded from env vars, NOT from run)
+const credentials = {
+  googlePassword: process.env.GOOGLE_PASSWORD || "",
+  managewpEmail: process.env.MANAGEWP_EMAIL || "",
+  managewpPassword: process.env.MANAGEWP_PASSWORD || "",
+  yamixEmail: process.env.YAMIX_EMAIL || "",
+  yamixPassword: process.env.YAMIX_PASSWORD || "",
+  seRankingEmail: process.env.SERANKING_EMAIL || "",
+  seRankingPassword: process.env.SERANKING_PASSWORD || ""
+};
+
 // "inputs" is always done at run creation; these are the steps the worker sequences.
 const STEP_ORDER = ["yamix", "googleAnalytics", "searchConsole", "manageWpHfcm", "seRanking", "finalCheck"];
 
@@ -102,7 +113,7 @@ async function handleStepAutomation(run, stepKey) {
 
   if (stepKey === "googleAnalytics") {
     console.log(`[worker] attempting GA4 automation for run ${run.id}`);
-    const result = await setupGA4(run);
+    const result = await setupGA4(run, credentials.googlePassword);
 
     if (result.needsOperator) {
       return {
@@ -150,7 +161,7 @@ async function handleStepAutomation(run, stepKey) {
 
   if (stepKey === "searchConsole") {
     console.log(`[worker] attempting GSC automation for run ${run.id}`);
-    const result = await setupGSC(run);
+    const result = await setupGSC(run, credentials.googlePassword);
 
     if (result.needsOperator) {
       return {

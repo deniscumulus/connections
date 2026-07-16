@@ -32,12 +32,16 @@ async function checkFor2FAOrCaptcha(page) {
   return false;
 }
 
-export async function setupGA4(run) {
+export async function setupGA4(run, googlePassword) {
   let browser;
   try {
     browser = await chromium.launch();
     const context = await browser.createBrowserContext();
     const page = await context.newPage();
+
+    if (!run.googleEmail || !googlePassword) {
+      throw new Error("Google credentials missing. Configure GOOGLE_EMAIL and GOOGLE_PASSWORD env vars.");
+    }
 
     // 1. Login to Google
     await page.goto("https://accounts.google.com/signin");
@@ -48,7 +52,7 @@ export async function setupGA4(run) {
       throw new Error("2FA or CAPTCHA detected. Operator intervention required.");
     }
 
-    await page.fill('input[type="password"]', run.googlePassword || "");
+    await page.fill('input[type="password"]', googlePassword);
     await page.click("button:has-text('Next')");
     await page.waitForNavigation();
 
