@@ -9,18 +9,14 @@ const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
 const AUTH_SESSION_KEY = "connection_setup_authenticated";
 const ACCESS_CODE = "operatorcumuluseo";
 
+// Order must match STEP_ORDER in worker.mjs: Yamix runs last (creates the project)
+// because it needs the GA4, GSC and SE Ranking IDs captured in the earlier steps.
 const stepMeta = [
   {
     key: "inputs",
     title: "Inputs",
     text: "Run created from the intake form. Gmail credentials are provided per run; global service credentials stay server-side.",
     links: []
-  },
-  {
-    key: "yamix",
-    title: "Yamix Existing Project",
-    text: "Automation finds the existing Yamix project by domain/name, reads and preserves market/language, fills captured IDs, then saves.",
-    links: [{ label: "Open Yamix Projects", href: "https://yamix.com/settings/projects" }]
   },
   {
     key: "googleAnalytics",
@@ -45,6 +41,12 @@ const stepMeta = [
     title: "SE Ranking",
     text: "Automation creates the SE Ranking project using the target market from the run and language read from Yamix, adds custom branded keywords or 5 generated branded keywords, connects GA4 and GSC, then captures IDs.",
     links: [{ label: "Open SE Ranking", href: "https://online.seranking.com/login.html" }]
+  },
+  {
+    key: "yamix",
+    title: "Yamix New Project",
+    text: "Automation creates the Yamix project and fills it with the captured GA4, GSC and SE Ranking IDs, the target market, and the main project URL.",
+    links: [{ label: "Open Yamix Projects", href: "https://yamix.com/settings/projects" }]
   },
   {
     key: "finalCheck",
@@ -281,7 +283,7 @@ function needsOperator(run) {
 function automationFor(run) {
   return run.automation || {
     status: "queued_for_worker",
-    currentStep: "yamix",
+    currentStep: "googleAnalytics",
     message: "Queued for the deterministic backend worker.",
     worker: "backend_worker"
   };
@@ -537,7 +539,7 @@ function renderDetail() {
   els.runSubtitle.textContent = `${run.siteUrl} | ${run.targetMarket || run.market || "No target market"} | ${run.googleEmail || "No Google email"}`;
 
   const progress = progressFor(run);
-  els.progressText.textContent = `${progress.done}/${progress.total} completed`;
+  els.progressText.textContent = `${progress.percent}% complete`;
   els.updatedText.textContent = `Updated ${new Date(run.updatedAt).toLocaleString()}`;
   els.progressBar.style.width = `${progress.percent}%`;
 
@@ -624,7 +626,7 @@ function initialAutomationPatch(raw) {
     automation: {
       status: "queued_for_worker",
       worker: "backend_worker",
-      currentStep: "yamix",
+      currentStep: "googleAnalytics",
       startedAt: timestamp,
       message: "Create Run received. This run is queued for the deterministic backend worker."
     },
