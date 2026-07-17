@@ -3,7 +3,7 @@ import { setupGA4 } from "./ga4-automation.mjs";
 import { setupGSC } from "./gsc-automation.mjs";
 import { setupSERanking } from "./seranking-automation.mjs";
 import { setupManageWPHFCM } from "./managewp-automation.mjs";
-import { setupYamixRead, setupYamixUpdate } from "./yamix-automation.mjs";
+import { setupYamixUpdate } from "./yamix-automation.mjs";
 
 const apiBase = process.env.WORKER_API_BASE || "http://127.0.0.1:4173";
 const basicAuthUser = process.env.BASIC_AUTH_USER || "";
@@ -22,14 +22,16 @@ const credentials = {
 };
 
 // "inputs" is always done at run creation; these are the steps the worker sequences.
-const STEP_ORDER = ["yamix", "googleAnalytics", "searchConsole", "manageWpHfcm", "seRanking", "finalCheck"];
+// Yamix runs LAST (before final check) because creating the Yamix project needs the
+// GA4, GSC and SE Ranking IDs captured in the earlier steps.
+const STEP_ORDER = ["googleAnalytics", "searchConsole", "manageWpHfcm", "seRanking", "yamix", "finalCheck"];
 
 const STEP_LABEL = {
-  yamix: "Yamix Existing Project",
   googleAnalytics: "Google Analytics",
   searchConsole: "Google Search Console",
   manageWpHfcm: "ManageWP and HFCM",
   seRanking: "SE Ranking",
+  yamix: "Yamix New Project",
   finalCheck: "Final check"
 };
 
@@ -240,14 +242,30 @@ async function handleStepAutomation(run, stepKey) {
   }
 
   if (stepKey === "yamix") {
-    console.log(`[worker] attempting Yamix read automation for run ${run.id}`);
-    const result = await setupYamixRead(run);
+    console.log(`[worker] attempting Yamix project creation for run ${run.id}`);
+    const result = await setupYamixUpdate(run, credentials.yamixEmail, credentials.yamixPassword);
+
+    if (result.needsOperator || !result.success) {
+      return {
+        automation: { ...run.automation, status: "needs_operator", message: `Yamix: ${result.error}` },
+        steps: {
+          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        },
+        logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Yamix: ${result.error}` }]
+      };
+    }
+
+    console.log(`[worker] Yamix project created for run ${run.id}`);
     return {
-      automation: { ...run.automation, status: "needs_operator", message: result.error },
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "blocked", note: result.error }
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "Yamix project created with GA4, GSC and SE Ranking IDs." }
       },
-      logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Yamix: ${result.error}` }]
+      confirmations: {
+        ...(run.confirmations || {}),
+        yamixCreated: true,
+        yamixUpdated: result.yamixUpdated
+      },
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Yamix project created with all captured IDs." }]
     };
   }
 
@@ -279,36 +297,15 @@ async function handleStepAutomation(run, stepKey) {
   }
 
   if (stepKey === "finalCheck") {
-    console.log(`[worker] final check and Yamix update for run ${run.id}`);
+    console.log(`[worker] final check for run ${run.id}`);
 
-    // Update Yamix with all captured IDs
-    const yamixResult = await setupYamixUpdate(run, credentials.yamixEmail, credentials.yamixPassword);
-
-    if (yamixResult.needsOperator || !yamixResult.success) {
-      console.warn(`[worker] Yamix update had issues: ${yamixResult.error}`);
-      // Log but don't fail final check
-      return {
-        steps: {
-          [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: `All steps complete. Yamix update: ${yamixResult.error || "needs review"}` }
-        },
-        confirmations: {
-          ...(run.confirmations || {}),
-          yamixUpdated: false
-        },
-        logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Yamix update: ${yamixResult.error || "needs operator review"}` }]
-      };
-    }
-
-    console.log(`[worker] Yamix updated successfully for run ${run.id}`);
+    // All work (including Yamix project creation) is done in the earlier steps.
+    // Final check just marks the run complete.
     return {
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "All steps complete. Yamix project updated with all IDs." }
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "All steps complete." }
       },
-      confirmations: {
-        ...(run.confirmations || {}),
-        yamixUpdated: yamixResult.yamixUpdated
-      },
-      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Final check complete. Yamix project updated with GA4, GSC, SE Ranking IDs." }]
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Final check complete. All steps done." }]
     };
   }
 
