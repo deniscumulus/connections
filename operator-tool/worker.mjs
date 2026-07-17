@@ -56,35 +56,6 @@ function firstIncompleteStep(run) {
   return STEP_ORDER.find((key) => (run.steps?.[key]?.status || "todo") !== "done") || null;
 }
 
-// No per-service automation is implemented yet (no Google/ManageWP/Yamix/SE Ranking
-// logins). Until that exists, the worker's job is only to sequence steps and hand
-// each one to the operator, instead of leaving the run silently stuck as "queued".
-async function flagNeedsOperator(run, stepKey) {
-  const timestamp = new Date().toISOString();
-  const reason = `Automation for "${STEP_LABEL[stepKey] || stepKey}" is not implemented yet. Complete this step manually, then click Resume automation.`;
-
-  return api(`/api/runs/${run.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      automation: {
-        ...(run.automation || {}),
-        status: "needs_operator",
-        currentStep: stepKey,
-        worker: "worker_v1",
-        message: reason
-      },
-      steps: {
-        [stepKey]: {
-          ...(run.steps?.[stepKey] || {}),
-          status: "blocked",
-          note: reason
-        }
-      },
-      logs: [...(run.logs || []), { at: timestamp, level: "warning", message: `Worker: ${reason}` }]
-    })
-  });
-}
-
 async function markComplete(run) {
   const timestamp = new Date().toISOString();
   return api(`/api/runs/${run.id}`, {
@@ -96,17 +67,67 @@ async function markComplete(run) {
   });
 }
 
-// Picks up runs nobody has claimed yet and hands the first step to the operator.
+// Runs the automation for one step, persists the result, and reports whether the
+// run is now blocked (needs an operator) so the caller knows to stop.
+async function runStep(run, stepKey) {
+  const stepUpdate = await handleStepAutomation(run, stepKey);
+  const blocked = stepUpdate.automation?.status === "needs_operator";
+
+  const automation = stepUpdate.automation
+    ? { ...stepUpdate.automation, currentStep: stepKey }
+    : { ...(run.automation || {}), status: "running", currentStep: stepKey };
+
+  const patch = {
+    automation,
+    ...(stepUpdate.steps && { steps: stepUpdate.steps }),
+    ...(stepUpdate.logs && { logs: stepUpdate.logs }),
+    ...(stepUpdate.captured && { captured: stepUpdate.captured }),
+    ...(stepUpdate.confirmations && { confirmations: stepUpdate.confirmations })
+  };
+
+  const updated = await api(`/api/runs/${run.id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+  return { updated, blocked };
+}
+
+// Drives a run forward through its steps until one needs an operator, a step
+// fails to advance, or every step is done.
+async function driveRun(run) {
+  let current = run;
+  let guard = null;
+  for (;;) {
+    const next = firstIncompleteStep(current);
+    if (!next) {
+      await markComplete(current);
+      console.log(`[worker] run ${current.id} complete`);
+      return;
+    }
+    if (next === guard) {
+      console.error(`[worker] run ${current.id} step "${next}" did not advance; stopping to avoid a loop`);
+      return;
+    }
+
+    console.log(`[worker] run ${current.id} running step "${next}"`);
+    const { updated, blocked } = await runStep(current, next);
+    if (blocked) {
+      console.log(`[worker] run ${current.id} paused at step "${next}" for operator`);
+      return;
+    }
+    guard = next;
+    current = updated;
+  }
+}
+
+// Picks up a queued run and drives it forward automatically.
 async function processQueued() {
   const run = await api("/api/runs/next-queued");
   if (!run) return;
 
   console.log(`[worker] claiming run ${run.id} (${run.hostname})`);
   const claimed = await api(`/api/runs/${run.id}/claim`, { method: "POST" });
-
-  const stepKey = firstIncompleteStep(claimed) || "finalCheck";
-  await flagNeedsOperator(claimed, stepKey);
-  console.log(`[worker] run ${run.id} needs operator at step "${stepKey}"`);
+  await driveRun(claimed);
 }
 
 // Handle step automation (GA4, GSC, etc). Returns updated run or null if needs operator pause.
@@ -319,58 +340,16 @@ async function handleStepAutomation(run, stepKey) {
   };
 }
 
-// Picks up runs the operator resumed (status "running"). Mark the current step
-// done, then advance to the next incomplete step (or mark all complete).
+// Picks up runs the operator resumed (status "running") and drives them forward.
+// driveRun re-runs the current blocked step first, so if the operator resolved
+// whatever blocked it (e.g. entered a Google verification code), it continues.
 async function processResumed() {
   const runs = await api("/api/runs");
   const resumed = runs.filter((run) => run.automation?.status === "running");
 
   for (const run of resumed) {
-    const stepKey = run.automation.currentStep;
-    const timestamp = new Date().toISOString();
-
-    // Mark the step the operator just completed as done
-    const updated = await api(`/api/runs/${run.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        steps: {
-          [stepKey]: {
-            ...(run.steps?.[stepKey] || {}),
-            status: "done",
-            note: "Operator completed this step."
-          }
-        },
-        logs: [...(run.logs || []), { at: timestamp, level: "info", message: `Worker: ${stepKey} marked done by operator.` }]
-      })
-    });
-
-    const next = firstIncompleteStep(updated);
-    if (!next) {
-      await markComplete(updated);
-      console.log(`[worker] run ${run.id} complete`);
-      continue;
-    }
-
-    // Try to automate the next step
-    const stepUpdate = await handleStepAutomation(updated, next);
-    const patch = {
-      automation: stepUpdate.automation,
-      steps: stepUpdate.steps,
-      logs: stepUpdate.logs,
-      ...(stepUpdate.captured && { captured: stepUpdate.captured }),
-      ...(stepUpdate.confirmations && { confirmations: stepUpdate.confirmations })
-    };
-
-    await api(`/api/runs/${run.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch)
-    });
-
-    if (stepUpdate.automation?.status === "needs_operator") {
-      console.log(`[worker] run ${run.id} paused at step "${next}" for operator`);
-    } else {
-      console.log(`[worker] run ${run.id} automated step "${next}"`);
-    }
+    console.log(`[worker] resuming run ${run.id} at step "${run.automation.currentStep}"`);
+    await driveRun(run);
   }
 }
 
