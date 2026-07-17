@@ -250,7 +250,7 @@ function defaultSteps() {
 }
 
 function isQueuedForCodex(run) {
-  return ["queued_for_codex", "waiting_for_worker"].includes(run.automation?.status) || (!run.automation && run.steps?.inputs?.status === "done");
+  return ["queued_for_codex", "queued_for_worker", "waiting_for_worker"].includes(run.automation?.status) || (!run.automation && run.steps?.inputs?.status === "done");
 }
 
 function buildRun(input) {

@@ -379,6 +379,9 @@ async function processResumed() {
 
 async function loop() {
   console.log(`[worker] started. API base: ${apiBase}, poll interval: ${pollIntervalMs}ms`);
+  console.log(
+    `[worker] credentials: google=${credentials.googlePassword ? "set" : "MISSING"}, managewp=${credentials.managewpEmail ? "set" : "MISSING"}, yamix=${credentials.yamixEmail ? "set" : "MISSING"}, seranking=${credentials.seRankingEmail ? "set" : "MISSING"}`
+  );
   for (;;) {
     try {
       await processQueued();
