@@ -24,7 +24,7 @@ jobs:
           EXCLUDE: "/data/"
           ARGS: "-rlgoDzvO --delete"
 
-      - name: Rebuild and Restart Docker Container
+            - name: Rebuild and Restart Docker Container
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.OVH_SERVER_IP }}
@@ -32,12 +32,12 @@ jobs:
           key: ${{ secrets.OVH_SSH_KEY }}
           script: |
             cd /opt/portfolio-setup-operator
-            export GOOGLE_PASSWORD="${{ secrets.GPASS }}"
-            export MANAGEWP_EMAIL="${{ secrets.WPMAIL }}"
-            export MANAGEWP_PASSWORD="${{ secrets.WPPASS }}"
-            export YAMIX_EMAIL="${{ secrets.YAMIXEMAIL }}"
-            export YAMIX_PASSWORD="${{ secrets.YAMIXPASS }}"
-            export SERANKING_EMAIL="${{ secrets.SEEMAIL }}"
-            export SERANKING_PASSWORD="${{ secrets.SEPASS }}"
             docker compose down
+            GOOGLE_PASSWORD="${{ secrets.GPASS }}" \
+            MANAGEWP_EMAIL="${{ secrets.WPMAIL }}" \
+            MANAGEWP_PASSWORD="${{ secrets.WPPASS }}" \
+            YAMIX_EMAIL="${{ secrets.YAMIXEMAIL }}" \
+            YAMIX_PASSWORD="${{ secrets.YAMIXPASS }}" \
+            SERANKING_EMAIL="${{ secrets.SEEMAIL }}" \
+            SERANKING_PASSWORD="${{ secrets.SEPASS }}" \
             docker compose up -d --build
