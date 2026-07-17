@@ -8,7 +8,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -24,7 +23,7 @@ jobs:
           EXCLUDE: "/data/"
           ARGS: "-rlgoDzvO --delete"
 
-            - name: Rebuild and Restart Docker Container
+      - name: Rebuild and Restart Docker Container
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.OVH_SERVER_IP }}
