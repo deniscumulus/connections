@@ -737,12 +737,11 @@ els.form.addEventListener("submit", async (event) => {
   const missing = [];
   if (!String(raw.siteUrl || "").trim()) missing.push("Site URL");
   if (!String(raw.targetMarket || "").trim()) missing.push("Target market");
-  if (!String(raw.language || "").trim()) missing.push("Language");
   if (!String(raw.ga4PropertyId || "").trim()) missing.push("GA4 property number");
   if (missing.length) {
     setFormError(`Required before start: ${missing.join(", ")}`);
     showToast("Missing required fields");
-    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='language'], [name='ga4PropertyId']")?.focus();
+    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='ga4PropertyId']")?.focus();
     return;
   }
   setFormError("");
@@ -750,7 +749,6 @@ els.form.addEventListener("submit", async (event) => {
     siteUrl: raw.siteUrl,
     projectName: raw.projectName,
     targetMarket: raw.targetMarket,
-    language: raw.language,
     ga4PropertyId: raw.ga4PropertyId,
     googleEmail: raw.googleEmail,
     seRankingKeywords: raw.seRankingKeywords
