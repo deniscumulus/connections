@@ -18,7 +18,8 @@ const credentials = {
   yamixEmail: process.env.YAMIX_EMAIL || "",
   yamixPassword: process.env.YAMIX_PASSWORD || "",
   seRankingEmail: process.env.SERANKING_EMAIL || "",
-  seRankingPassword: process.env.SERANKING_PASSWORD || ""
+  seRankingPassword: process.env.SERANKING_PASSWORD || "",
+  seRankingApiKey: process.env.SERANKING_API_KEY || ""
 };
 
 // Manual before the run: create the Google account and connect the site to GA4 +
@@ -229,7 +230,7 @@ async function handleStepAutomation(run, stepKey) {
 
   if (stepKey === "seRanking") {
     console.log(`[worker] attempting SE Ranking automation for run ${run.id}`);
-    const result = await setupSERanking(run);
+    const result = await setupSERanking(run, credentials.seRankingApiKey);
 
     if (result.needsOperator || !result.success) {
       return {
@@ -253,11 +254,9 @@ async function handleStepAutomation(run, stepKey) {
       },
       confirmations: {
         ...(run.confirmations || {}),
-        seRankingCreated: true,
-        seRankingGa4Connected: true,
-        seRankingGscConnected: true
+        seRankingCreated: true
       },
-      logs: [...(run.logs || []), { at: timestamp, level: "info", message: `SE Ranking setup complete. Project: ${result.seRankingProjectId}` }]
+      logs: [...(run.logs || []), { at: timestamp, level: "info", message: `SE Ranking project created. site_id: ${result.seRankingProjectId}` }]
     };
   }
 

@@ -1,69 +1,75 @@
-import { chromium } from "playwright";
+// SE Ranking via the official Project API (no browser, no reCAPTCHA).
+// Docs: https://seranking.com/api/project/project-management/
+// Auth: Authorization: Token <API key>. Creating a project uses the plan's
+// project limits, not API credits.
+const SE_RANKING_API_BASE = "https://api.seranking.com/v1";
 
-const SE_RANKING_LOGIN = "https://online.seranking.com/login.html";
-
-async function waitForSelector(page, selector, timeout = 30000) {
-  try {
-    await page.waitForSelector(selector, { timeout });
-    return true;
-  } catch {
-    return false;
-  }
+function normalizeHost(value) {
+  return String(value || "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/.*$/, "")
+    .toLowerCase();
 }
 
-async function checkFor2FAOrCaptcha(page) {
-  const indicators = [
-    "text=verify",
-    "text=2-Step",
-    "text=2FA",
-    "text=Captcha",
-    "text=unusual activity",
-    'iframe[src*="recaptcha"]',
-    'iframe[src*="challenge"]'
-  ];
-
-  for (const indicator of indicators) {
-    if (await page.locator(indicator).first().isVisible({ timeout: 1000 }).catch(() => false)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export async function setupSERanking(run) {
-  let browser;
+// Creates (or reuses) the SE Ranking project for the run's domain and returns
+// the site_id, which is the SE Ranking Project ID. The backlink monitor is keyed
+// by the same site_id, so we use it for the Backlinks Report ID too.
+// NOTE: verify against Yamix whether "Backlinks Report ID" is a separate value.
+export async function setupSERanking(run, apiKey) {
   try {
-    // SE Ranking requires separate credentials (not Google login)
-    // For now, we'll skip the actual SE Ranking setup and return a placeholder
-    // because SE Ranking credentials aren't yet captured in the run form
-
-    return {
-      success: false,
-      needsOperator: true,
-      error: "SE Ranking credentials not configured. This step requires operator setup via SE Ranking dashboard."
-    };
-
-    // TODO: Once SE Ranking credentials are added to run form, implement:
-    // 1. Login to SE Ranking with credentials
-    // 2. Create new project for the domain
-    // 3. Add branded keywords (from run.defaults.seRankingKeywords)
-    // 4. Connect GA4 property
-    // 5. Connect GSC property
-    // 6. Capture Project ID and Backlinks Report ID
-  } catch (error) {
-    if (browser) await browser.close();
-
-    if (error.message.includes("2FA") || error.message.includes("CAPTCHA")) {
+    if (!apiKey) {
       return {
         success: false,
         needsOperator: true,
-        error: error.message
+        error: "SE Ranking API key not configured (SERANKING_API_KEY)."
       };
     }
 
-    return {
-      success: false,
-      error: error.message
+    const headers = {
+      authorization: `Token ${apiKey}`,
+      "content-type": "application/json"
     };
+    const targetHost = normalizeHost(run.hostname || run.siteUrl);
+
+    // 1. Reuse an existing project for this domain if it already exists.
+    let siteId = null;
+    const listRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, { headers });
+    if (listRes.ok) {
+      const sites = await listRes.json();
+      if (Array.isArray(sites)) {
+        const match = sites.find(
+          (site) => normalizeHost(site.name || site.domain || site.url) === targetHost
+        );
+        if (match) siteId = match.id || match.site_id;
+      }
+    }
+
+    // 2. Otherwise create it.
+    if (!siteId) {
+      const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url: run.siteUrl, title: run.projectName })
+      });
+      if (!createRes.ok) {
+        const text = await createRes.text().catch(() => "");
+        return { success: false, error: `SE Ranking create failed: ${createRes.status} ${text}`.trim() };
+      }
+      const created = await createRes.json();
+      siteId = created.site_id || created.id;
+    }
+
+    if (!siteId) {
+      return { success: false, error: "SE Ranking: could not determine site_id from the API response." };
+    }
+
+    return {
+      success: true,
+      seRankingProjectId: String(siteId),
+      seRankingBacklinksReportId: String(siteId)
+    };
+  } catch (error) {
+    return { success: false, error: `SE Ranking API error: ${error.message}` };
   }
 }
