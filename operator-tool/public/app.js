@@ -9,20 +9,26 @@ const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
 const AUTH_SESSION_KEY = "connection_setup_authenticated";
 const ACCESS_CODE = "operatorcumuluseo";
 
-// Order must match STEP_ORDER in worker.mjs. GA4, GSC and SE Ranking are done
-// manually before the run; their IDs are entered on the form. The only automated
-// step is creating the Yamix project.
+// Order must match STEP_ORDER in worker.mjs. GA4 + GSC are set up manually before
+// the run (operator provides the GA4 property number). The tool does SE Ranking,
+// then creates the Yamix project. Yamix runs last.
 const stepMeta = [
   {
     key: "inputs",
     title: "Inputs",
-    text: "Run created from the intake form. GA4, GSC and SE Ranking are set up manually beforehand; their IDs are entered on the form.",
+    text: "Run created from the intake form. GA4 and GSC are set up manually beforehand; the domain, GA4 property number, market and language are entered on the form.",
     links: []
+  },
+  {
+    key: "seRanking",
+    title: "SE Ranking",
+    text: "Automation creates the SE Ranking project for the domain and captures the SE Ranking Project ID and Backlinks Report ID for Yamix.",
+    links: [{ label: "Open SE Ranking", href: "https://online.seranking.com/login.html" }]
   },
   {
     key: "yamix",
     title: "Yamix New Project",
-    text: "Automation creates the Yamix project and fills it with the GA4, GSC and SE Ranking IDs from the form, the target market, and the main project URL.",
+    text: "Automation creates the Yamix project and fills it with the derived GA4/GSC dataset names, the captured SE Ranking IDs, the market, language, and main project URL.",
     links: [{ label: "Open Yamix Projects", href: "https://yamix.com/settings/projects" }]
   },
   {
@@ -260,7 +266,7 @@ function needsOperator(run) {
 function automationFor(run) {
   return run.automation || {
     status: "queued_for_worker",
-    currentStep: "yamix",
+    currentStep: "seRanking",
     message: "Queued for the deterministic backend worker.",
     worker: "backend_worker"
   };
@@ -603,7 +609,7 @@ function initialAutomationPatch(raw) {
     automation: {
       status: "queued_for_worker",
       worker: "backend_worker",
-      currentStep: "yamix",
+      currentStep: "seRanking",
       startedAt: timestamp,
       message: "Create Run received. This run is queued for the deterministic backend worker."
     },
@@ -731,11 +737,12 @@ els.form.addEventListener("submit", async (event) => {
   const missing = [];
   if (!String(raw.siteUrl || "").trim()) missing.push("Site URL");
   if (!String(raw.targetMarket || "").trim()) missing.push("Target market");
-  if (!String(raw.googleEmail || "").trim()) missing.push("Google email");
+  if (!String(raw.language || "").trim()) missing.push("Language");
+  if (!String(raw.ga4PropertyId || "").trim()) missing.push("GA4 property number");
   if (missing.length) {
     setFormError(`Required before start: ${missing.join(", ")}`);
     showToast("Missing required fields");
-    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='googleEmail']")?.focus();
+    els.form.querySelector("[name='siteUrl'], [name='targetMarket'], [name='language'], [name='ga4PropertyId']")?.focus();
     return;
   }
   setFormError("");
@@ -743,8 +750,9 @@ els.form.addEventListener("submit", async (event) => {
     siteUrl: raw.siteUrl,
     projectName: raw.projectName,
     targetMarket: raw.targetMarket,
-    googleEmail: raw.googleEmail,
+    language: raw.language,
     ga4PropertyId: raw.ga4PropertyId,
+    googleEmail: raw.googleEmail,
     seRankingKeywords: raw.seRankingKeywords
   };
   const run = await api("/api/runs", {

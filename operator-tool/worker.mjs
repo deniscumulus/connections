@@ -21,12 +21,15 @@ const credentials = {
   seRankingPassword: process.env.SERANKING_PASSWORD || ""
 };
 
-// GA4, GSC and SE Ranking are all done MANUALLY before the run. The operator
-// enters the resulting IDs on the intake form. The only thing the tool automates
-// is creating the Yamix project from those values.
-const STEP_ORDER = ["yamix", "finalCheck"];
+// Manual before the run: create the Google account and connect the site to GA4 +
+// GSC, then copy the GA4 property number (from the GA4 URL, after "p") into the form.
+// The tool then: creates the SE Ranking project and captures its IDs; derives the
+// GA4 dataset (analytics_<propertyId>) and GSC dataset (searchconsole_<site>) names;
+// and creates the Yamix project filled with all of it. Yamix runs last.
+const STEP_ORDER = ["seRanking", "yamix", "finalCheck"];
 
 const STEP_LABEL = {
+  seRanking: "SE Ranking",
   yamix: "Yamix New Project",
   finalCheck: "Final check"
 };

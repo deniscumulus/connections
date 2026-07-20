@@ -238,10 +238,11 @@ function brandedKeywords({ hostname, projectName, seRankingKeywords }) {
 }
 
 function defaultSteps() {
-  // GA4, GSC and SE Ranking are done manually before the run. The only automated
-  // step is creating the Yamix project.
+  // GA4/GSC are set up manually before the run (operator provides the GA4 property
+  // number). The tool automates SE Ranking, then creates the Yamix project.
   return {
     inputs: { status: "done", note: "" },
+    seRanking: { status: "todo", note: "" },
     yamix: { status: "todo", note: "" },
     finalCheck: { status: "todo", note: "" }
   };
@@ -261,6 +262,11 @@ function buildRun(input) {
   // Google email comes from form (per-run), password is from server env var
   const googleEmail = (input.googleEmail || "").trim();
 
+  // The operator copies the GA4 property number (from the GA4 URL, after "p").
+  // The BigQuery GA4 export dataset is always analytics_<propertyId>.
+  const ga4PropertyId = (input.ga4PropertyId || "").trim();
+  const ga4DatasetName = ga4PropertyId ? `analytics_${ga4PropertyId}` : "";
+
   return {
     id: randomUUID(),
     createdAt: now,
@@ -269,8 +275,8 @@ function buildRun(input) {
     siteUrl,
     hostname,
     googleEmail,
-    market: "",
-    language: "",
+    market: (input.targetMarket || "").trim(),
+    language: (input.language || "").trim(),
     defaults: {
       yamixParentProject: "SKY Rocket",
       yamixRegexPattern: "",
@@ -279,7 +285,7 @@ function buildRun(input) {
     },
     generated: {
       gscDatasetName: datasetFromDomain(hostname),
-      ga4DatasetName: "",
+      ga4DatasetName,
       yamixMainProjectUrl: siteUrl
     },
     captured: {
@@ -353,6 +359,11 @@ function applyDerived(run) {
 
   if (run.hostname) {
     run.generated.gscDatasetName = datasetFromDomain(run.hostname);
+  }
+
+  // GA4 BigQuery export dataset is always analytics_<propertyId>.
+  if (!run.generated.ga4DatasetName && run.captured?.ga4PropertyId) {
+    run.generated.ga4DatasetName = `analytics_${run.captured.ga4PropertyId}`;
   }
 
   if (!run.captured.ga4BigQueryProjectId) {
