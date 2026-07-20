@@ -190,6 +190,21 @@ function splitCompactBrand(value) {
   return words.filter(Boolean);
 }
 
+function titleCaseWord(word) {
+  if (!word) return word;
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+// Best-effort project name from domain + market, e.g.
+// 21grandcasino.com + "AU" -> "21Grand Casino AU". Splitting a spaceless domain
+// into words is heuristic (uses the known brand terms), so it may need tuning.
+function projectNameFromDomain(hostname, market) {
+  const base = domainBaseForDataset(hostname);
+  const name = splitCompactBrand(base).map(titleCaseWord).join(" ").trim();
+  const marketTag = String(market || "").trim().toUpperCase();
+  return marketTag ? `${name} ${marketTag}`.trim() : name;
+}
+
 function parseKeywordInput(value) {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
   return String(value || "")
@@ -255,7 +270,10 @@ function isQueuedForCodex(run) {
 function buildRun(input) {
   const siteUrl = normalizeUrl(input.siteUrl || input.domain || "");
   const hostname = domainFromUrl(siteUrl);
-  const projectName = (input.projectName || domainForDataset(hostname)).trim();
+  const market = (input.targetMarket || "").trim();
+  // Project name is derived from the domain + market (no form field), e.g.
+  // 21grandcasino.com + "AU" -> "21Grand Casino AU".
+  const projectName = projectNameFromDomain(hostname, market);
   const bigQueryProjectId = (input.ga4BigQueryProjectId || "").trim() || defaultBigQueryProjectId;
   const now = new Date().toISOString();
 
@@ -275,7 +293,7 @@ function buildRun(input) {
     siteUrl,
     hostname,
     googleEmail,
-    market: (input.targetMarket || "").trim(),
+    market,
     language: (input.language || "").trim(),
     defaults: {
       yamixParentProject: "SKY Rocket",

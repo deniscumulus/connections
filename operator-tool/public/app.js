@@ -747,7 +747,6 @@ els.form.addEventListener("submit", async (event) => {
   setFormError("");
   const payload = {
     siteUrl: raw.siteUrl,
-    projectName: raw.projectName,
     targetMarket: raw.targetMarket,
     ga4PropertyId: raw.ga4PropertyId,
     googleEmail: raw.googleEmail,
