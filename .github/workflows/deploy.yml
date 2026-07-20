@@ -22,6 +22,7 @@ jobs:
           YAMIX_PASSWORD=${{ secrets.YAMIXPASS }}
           SERANKING_EMAIL=${{ secrets.SEEMAIL }}
           SERANKING_PASSWORD=${{ secrets.SEPASS }}
+          SERANKING_API_KEY=${{ secrets.SERANKING_API_KEY }}
           EOF
 
       - name: Sync Files to OVH VPS
