@@ -42,8 +42,10 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    // 1. Login (confirmed: "Email"/"Password" fields, "Log in" button, no CAPTCHA).
-    await page.goto("https://yamix.com/login");
+    // 1. Login. The login form is at the root (yamix.com), not /login (which 404s).
+    // Confirmed DOM: input[type=email] (placeholder "example@gmail.com"),
+    // input[type=password], button "Log in" (type=submit). No CAPTCHA.
+    await page.goto("https://yamix.com");
     await page.fill('input[type="email"]', yamixEmail);
     await page.fill('input[type="password"]', yamixPassword);
     await page.click("button:has-text('Log in')");
