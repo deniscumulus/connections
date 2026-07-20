@@ -238,13 +238,12 @@ function brandedKeywords({ hostname, projectName, seRankingKeywords }) {
 }
 
 function defaultSteps() {
+  // GA4 and GSC are done manually before the run, so they are not worker steps.
   return {
     inputs: { status: "done", note: "" },
-    yamix: { status: "todo", note: "" },
-    googleAnalytics: { status: "todo", note: "" },
-    searchConsole: { status: "todo", note: "" },
     manageWpHfcm: { status: "todo", note: "" },
     seRanking: { status: "todo", note: "" },
+    yamix: { status: "todo", note: "" },
     finalCheck: { status: "todo", note: "" }
   };
 }

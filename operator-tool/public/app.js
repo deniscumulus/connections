@@ -9,26 +9,15 @@ const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
 const AUTH_SESSION_KEY = "connection_setup_authenticated";
 const ACCESS_CODE = "operatorcumuluseo";
 
-// Order must match STEP_ORDER in worker.mjs: Yamix runs last (creates the project)
-// because it needs the GA4, GSC and SE Ranking IDs captured in the earlier steps.
+// Order must match STEP_ORDER in worker.mjs. GA4 and GSC are done manually before
+// the run (their values are entered on the form), so they are not steps here.
+// Yamix runs last because it needs the GA4/GSC/SE Ranking values.
 const stepMeta = [
   {
     key: "inputs",
     title: "Inputs",
-    text: "Run created from the intake form. Gmail credentials are provided per run; global service credentials stay server-side.",
+    text: "Run created from the intake form. GA4 and GSC are set up manually beforehand; their IDs and the GSC verification tag are entered on the form.",
     links: []
-  },
-  {
-    key: "googleAnalytics",
-    title: "Google Analytics",
-    text: "Automation logs into the provided Gmail account, creates the GA4 property and web stream, links BigQuery, then captures IDs.",
-    links: [{ label: "Open GA4", href: "https://analytics.google.com/analytics/web/" }]
-  },
-  {
-    key: "searchConsole",
-    title: "Google Search Console",
-    text: "Automation creates the URL-prefix property, captures the HTML verification tag, configures Bulk data export, and verifies ownership after HFCM.",
-    links: [{ label: "Open GSC", href: "https://search.google.com/search-console/welcome" }]
   },
   {
     key: "manageWpHfcm",
@@ -283,7 +272,7 @@ function needsOperator(run) {
 function automationFor(run) {
   return run.automation || {
     status: "queued_for_worker",
-    currentStep: "googleAnalytics",
+    currentStep: "manageWpHfcm",
     message: "Queued for the deterministic backend worker.",
     worker: "backend_worker"
   };
@@ -626,7 +615,7 @@ function initialAutomationPatch(raw) {
     automation: {
       status: "queued_for_worker",
       worker: "backend_worker",
-      currentStep: "googleAnalytics",
+      currentStep: "manageWpHfcm",
       startedAt: timestamp,
       message: "Create Run received. This run is queued for the deterministic backend worker."
     },

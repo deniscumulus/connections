@@ -21,14 +21,13 @@ const credentials = {
   seRankingPassword: process.env.SERANKING_PASSWORD || ""
 };
 
-// "inputs" is always done at run creation; these are the steps the worker sequences.
-// Yamix runs LAST (before final check) because creating the Yamix project needs the
-// GA4, GSC and SE Ranking IDs captured in the earlier steps.
-const STEP_ORDER = ["googleAnalytics", "searchConsole", "manageWpHfcm", "seRanking", "yamix", "finalCheck"];
+// GA4 and GSC are done MANUALLY by the operator before the run starts (Google
+// blocks automated logins). The operator enters the resulting GA4/GSC values on
+// the intake form, and these automated steps use them. Yamix runs LAST because
+// creating the Yamix project needs the GA4/GSC/SE Ranking values.
+const STEP_ORDER = ["manageWpHfcm", "seRanking", "yamix", "finalCheck"];
 
 const STEP_LABEL = {
-  googleAnalytics: "Google Analytics",
-  searchConsole: "Google Search Console",
   manageWpHfcm: "ManageWP and HFCM",
   seRanking: "SE Ranking",
   yamix: "Yamix New Project",
