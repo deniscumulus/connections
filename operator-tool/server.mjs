@@ -190,6 +190,26 @@ function splitCompactBrand(value) {
   return words.filter(Boolean);
 }
 
+// Language is derived from the market. Values are best-effort; the exact labels
+// must match the Yamix Language dropdown when the Yamix automation is built.
+const MARKET_LANGUAGE = {
+  GB: "English",
+  US: "English",
+  CA: "English",
+  AU: "English",
+  NZ: "English",
+  IE: "English",
+  DE: "German",
+  BR: "Portuguese",
+  NL: "Dutch",
+  FI: "Finnish",
+  FR: "French",
+  DK: "Danish",
+  ES: "Spanish",
+  SV: "Spanish",
+  CL: "Spanish"
+};
+
 function titleCaseWord(word) {
   if (!word) return word;
   return word.charAt(0).toUpperCase() + word.slice(1);
@@ -294,7 +314,7 @@ function buildRun(input) {
     hostname,
     googleEmail,
     market,
-    language: (input.language || "").trim(),
+    language: MARKET_LANGUAGE[market] || (input.language || "").trim(),
     defaults: {
       yamixParentProject: "SKY Rocket",
       yamixRegexPattern: "",
