@@ -9,26 +9,20 @@ const DEFAULT_BIGQUERY_DATA_LOCATION = "Frankfurt (europe-west3)";
 const AUTH_SESSION_KEY = "connection_setup_authenticated";
 const ACCESS_CODE = "operatorcumuluseo";
 
-// Order must match STEP_ORDER in worker.mjs. GA4 and GSC are done manually before
-// the run (their values are entered on the form), so they are not steps here.
-// Yamix runs last because it needs the GA4/GSC/SE Ranking values.
+// Order must match STEP_ORDER in worker.mjs. GA4, GSC and SE Ranking are done
+// manually before the run; their IDs are entered on the form. The only automated
+// step is creating the Yamix project.
 const stepMeta = [
   {
     key: "inputs",
     title: "Inputs",
-    text: "Run created from the intake form. GA4 and GSC (property, tracking code, verification) are set up manually beforehand; the GA4 Property ID is entered on the form.",
+    text: "Run created from the intake form. GA4, GSC and SE Ranking are set up manually beforehand; their IDs are entered on the form.",
     links: []
-  },
-  {
-    key: "seRanking",
-    title: "SE Ranking",
-    text: "Automation creates the SE Ranking project using the target market from the run and language read from Yamix, adds custom branded keywords or 5 generated branded keywords, connects GA4 and GSC, then captures IDs.",
-    links: [{ label: "Open SE Ranking", href: "https://online.seranking.com/login.html" }]
   },
   {
     key: "yamix",
     title: "Yamix New Project",
-    text: "Automation creates the Yamix project and fills it with the captured GA4, GSC and SE Ranking IDs, the target market, and the main project URL.",
+    text: "Automation creates the Yamix project and fills it with the GA4, GSC and SE Ranking IDs from the form, the target market, and the main project URL.",
     links: [{ label: "Open Yamix Projects", href: "https://yamix.com/settings/projects" }]
   },
   {
@@ -266,7 +260,7 @@ function needsOperator(run) {
 function automationFor(run) {
   return run.automation || {
     status: "queued_for_worker",
-    currentStep: "seRanking",
+    currentStep: "yamix",
     message: "Queued for the deterministic backend worker.",
     worker: "backend_worker"
   };
@@ -609,7 +603,7 @@ function initialAutomationPatch(raw) {
     automation: {
       status: "queued_for_worker",
       worker: "backend_worker",
-      currentStep: "seRanking",
+      currentStep: "yamix",
       startedAt: timestamp,
       message: "Create Run received. This run is queued for the deterministic backend worker."
     },

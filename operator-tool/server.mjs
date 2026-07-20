@@ -238,11 +238,10 @@ function brandedKeywords({ hostname, projectName, seRankingKeywords }) {
 }
 
 function defaultSteps() {
-  // GA4/GSC (incl. tracking code + verification tag on the site) are done manually
-  // before the run, so they are not worker steps.
+  // GA4, GSC and SE Ranking are done manually before the run. The only automated
+  // step is creating the Yamix project.
   return {
     inputs: { status: "done", note: "" },
-    seRanking: { status: "todo", note: "" },
     yamix: { status: "todo", note: "" },
     finalCheck: { status: "todo", note: "" }
   };
