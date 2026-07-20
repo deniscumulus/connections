@@ -27,8 +27,10 @@ async function selectDropdown(page, triggerText, optionText) {
 //   GA4 Dataset Name | SERanking Project ID | SERanking Backlinks Report ID |
 //   Market (dropdown) | Language (dropdown) | Regex Pattern
 //
-// Still UNCONFIRMED (need screenshots): the login page, how to reach the create
-// form, the dropdown DOM/option labels, and the Save button text.
+// Confirmed from screenshots: login ("Log in", no CAPTCHA), navigation
+// (Settings > Projects > "Create Project"), field placeholders, and Save
+// ("Save changes"). Still UNCONFIRMED: the Parent/Market/Language dropdown DOM
+// and their exact option labels — selectDropdown is best-effort until verified.
 export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
   let browser;
   try {
@@ -40,21 +42,18 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    // 1. Login. NOTE: login selectors are a best guess (no login screenshot yet).
+    // 1. Login (confirmed: "Email"/"Password" fields, "Log in" button, no CAPTCHA).
     await page.goto("https://yamix.com/login");
     await page.fill('input[type="email"]', yamixEmail);
     await page.fill('input[type="password"]', yamixPassword);
-    await page.click("button:has-text('Sign in')");
+    await page.click("button:has-text('Log in')");
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    // 2. Open the "create project" form. NOTE: exact navigation not confirmed.
+    // 2. Settings > Projects > Create Project (confirmed navigation).
     await page.goto("https://yamix.com/settings/projects");
     await page.waitForLoadState();
-    const createBtn = page.getByRole("button", { name: /create project|add project|new project/i }).first();
-    if (await createBtn.isVisible().catch(() => false)) {
-      await createBtn.click();
-      await page.waitForTimeout(500);
-    }
+    await page.getByRole("button", { name: /create project/i }).first().click();
+    await page.waitForTimeout(600);
 
     // 3. Fill the Basic Information fields (placeholders from the real form).
     await fillByPlaceholder(page, "Enter main project URL", run.siteUrl);
@@ -67,9 +66,8 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await selectDropdown(page, "Select Language", run.language);
     await fillByPlaceholder(page, "Enter regex pattern", run.defaults?.yamixRegexPattern || "");
 
-    // 4. Save. NOTE: exact save/submit button text not confirmed.
-    const saveButton = page.getByRole("button", { name: /save|create|submit/i }).first();
-    await saveButton.click();
+    // 4. Save (confirmed: "Save changes").
+    await page.getByRole("button", { name: /save changes/i }).first().click();
     await page.waitForTimeout(2000);
 
     const saved = await page
