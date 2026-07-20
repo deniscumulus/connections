@@ -749,7 +749,6 @@ els.form.addEventListener("submit", async (event) => {
     siteUrl: raw.siteUrl,
     targetMarket: raw.targetMarket,
     ga4PropertyId: raw.ga4PropertyId,
-    googleEmail: raw.googleEmail,
     seRankingKeywords: raw.seRankingKeywords
   };
   const run = await api("/api/runs", {
