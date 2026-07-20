@@ -1,36 +1,34 @@
 import { chromium } from "playwright";
 
-const YAMIX_URL = "https://yamix.com/settings/projects";
-
-async function waitForSelector(page, selector, timeout = 30000) {
-  try {
-    await page.waitForSelector(selector, { timeout });
-    return true;
-  } catch {
-    return false;
-  }
+// Fill a Yamix text field by its placeholder (taken from the real "new project"
+// form: "Enter main project URL", "Enter GSC dataset name", etc.).
+async function fillByPlaceholder(page, placeholder, value) {
+  if (value == null || value === "") return;
+  const field = page.getByPlaceholder(placeholder, { exact: false }).first();
+  await field.fill(String(value));
 }
 
-export async function setupYamixRead(run) {
-  // Yamix requires login and manual navigation to find existing project
-  // For initial read phase, return operator-pause since finding the right project
-  // requires the operator to know which one is correct
-
-  return {
-    success: false,
-    needsOperator: true,
-    error: "Yamix project discovery requires operator. Please log into Yamix, find the existing project matching this domain, read its Market and Language values, then click Resume automation."
-  };
-
-  // TODO: Once Yamix credentials are provided, implement:
-  // 1. Login to Yamix with credentials
-  // 2. Navigate to Settings > Projects
-  // 3. Search for project matching run.hostname
-  // 4. Open project details
-  // 5. Read Market and Language values
-  // 6. Capture them
+// Best-effort select for Yamix's custom dropdowns (Parent project, Market,
+// Language): click the control showing `triggerText`, then click the option
+// matching `optionText`. NEEDS live verification — the exact DOM of these
+// dropdowns and the exact option labels are not confirmed yet.
+async function selectDropdown(page, triggerText, optionText) {
+  if (!optionText) return;
+  await page.getByText(triggerText, { exact: false }).first().click().catch(() => {});
+  await page.waitForTimeout(400);
+  await page.getByText(optionText, { exact: true }).first().click().catch(() => {});
 }
 
+// Creates a new Yamix project and fills it with the run's derived dataset names,
+// the captured SE Ranking IDs, the market and language, and the main project URL.
+//
+// Grounded on the "Create project / Basic Information" form screenshot:
+//   Main Project URL | Parent project (dropdown) | GSC Dataset Name |
+//   GA4 Dataset Name | SERanking Project ID | SERanking Backlinks Report ID |
+//   Market (dropdown) | Language (dropdown) | Regex Pattern
+//
+// Still UNCONFIRMED (need screenshots): the login page, how to reach the create
+// form, the dropdown DOM/option labels, and the Save button text.
 export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
   let browser;
   try {
@@ -42,89 +40,52 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    // 1. Login to Yamix
+    // 1. Login. NOTE: login selectors are a best guess (no login screenshot yet).
     await page.goto("https://yamix.com/login");
     await page.fill('input[type="email"]', yamixEmail);
     await page.fill('input[type="password"]', yamixPassword);
     await page.click("button:has-text('Sign in')");
-    await page.waitForNavigation({ timeout: 10000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
 
-    // 2. Navigate to Settings > Projects
+    // 2. Open the "create project" form. NOTE: exact navigation not confirmed.
     await page.goto("https://yamix.com/settings/projects");
     await page.waitForLoadState();
+    const createBtn = page.getByRole("button", { name: /create project|add project|new project/i }).first();
+    if (await createBtn.isVisible().catch(() => false)) {
+      await createBtn.click();
+      await page.waitForTimeout(500);
+    }
 
-    // 3. Search for project matching hostname
-    const searchInput = page.locator('input[placeholder*="Search"]').first();
-    await searchInput.fill(run.hostname);
-    await page.waitForTimeout(1500);
+    // 3. Fill the Basic Information fields (placeholders from the real form).
+    await fillByPlaceholder(page, "Enter main project URL", run.siteUrl);
+    await selectDropdown(page, "Select parent project", run.defaults?.yamixParentProject || "SKY Rocket");
+    await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
+    await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
+    await fillByPlaceholder(page, "Enter SERanking project ID", run.captured?.seRankingProjectId);
+    await fillByPlaceholder(page, "Enter backlinks report ID", run.captured?.seRankingBacklinksReportId);
+    await selectDropdown(page, "Select Market", run.market);
+    await selectDropdown(page, "Select Language", run.language);
+    await fillByPlaceholder(page, "Enter regex pattern", run.defaults?.yamixRegexPattern || "");
 
-    // Click the matching project
-    const projectLink = page.locator(`text=${run.hostname}`).first();
-    await projectLink.click();
-    await page.waitForNavigation({ timeout: 10000 });
-
-    // 4. Fill/update fields
-    // Main Project URL
-    const urlInput = page.locator('input[placeholder*="URL"]').first();
-    await urlInput.fill(run.siteUrl);
-
-    // Parent project
-    const parentInput = page.locator('input[placeholder*="Parent"]').first();
-    await parentInput.fill("SKY Rocket");
-
-    // GSC Dataset Name
-    const gscDatasetInput = page.locator('input[placeholder*="GSC"]').first();
-    const gscDatasetName = run.generated?.gscDatasetName || `searchconsole_${run.hostname.replace(/^www\./, "").replace(/\..+$/, "")}`;
-    await gscDatasetInput.fill(gscDatasetName);
-
-    // GA4 Dataset Name
-    const ga4DatasetInput = page.locator('input[placeholder*="GA4"]').first();
-    const ga4DatasetName = run.generated?.ga4DatasetName || `analytics_${run.captured?.ga4PropertyId || ""}`;
-    await ga4DatasetInput.fill(ga4DatasetName);
-
-    // SE Ranking Project ID
-    const seRankingProjectInput = page.locator('input[placeholder*="SE Ranking Project"]').first();
-    await seRankingProjectInput.fill(run.captured?.seRankingProjectId || "");
-
-    // SE Ranking Backlinks Report ID
-    const seRankingReportInput = page.locator('input[placeholder*="Backlinks"]').first();
-    await seRankingReportInput.fill(run.captured?.seRankingBacklinksReportId || "");
-
-    // Regex Pattern (leave empty)
-    const regexInput = page.locator('input[placeholder*="Regex"]').first();
-    await regexInput.fill("");
-
-    // NOTE: Market and Language are preserved (not updated, read in step 1)
-
-    // 5. Save
-    const saveButton = page.locator("button:has-text('Save')").first();
+    // 4. Save. NOTE: exact save/submit button text not confirmed.
+    const saveButton = page.getByRole("button", { name: /save|create|submit/i }).first();
     await saveButton.click();
     await page.waitForTimeout(2000);
 
-    // Verify saved
-    const successMessage = await page.locator("text=Updated").first().isVisible().catch(() => false);
+    const saved = await page
+      .getByText(/created|saved|success|updated/i)
+      .first()
+      .isVisible({ timeout: 3000 })
+      .catch(() => false);
 
     await browser.close();
-
-    return {
-      success: true,
-      yamixUpdated: successMessage,
-      message: "Yamix project updated with GA4, GSC, and SE Ranking IDs"
-    };
+    return { success: true, yamixUpdated: saved, message: "Yamix project created and filled." };
   } catch (error) {
     if (browser) await browser.close();
 
-    if (error.message.includes("2FA") || error.message.includes("CAPTCHA")) {
-      return {
-        success: false,
-        needsOperator: true,
-        error: error.message
-      };
+    if (/2FA|CAPTCHA|recaptcha/i.test(error.message)) {
+      return { success: false, needsOperator: true, error: error.message };
     }
-
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 }
