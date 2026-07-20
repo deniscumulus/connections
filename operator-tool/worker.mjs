@@ -21,14 +21,13 @@ const credentials = {
   seRankingPassword: process.env.SERANKING_PASSWORD || ""
 };
 
-// GA4 and GSC are done MANUALLY by the operator before the run starts (Google
-// blocks automated logins). The operator enters the resulting GA4/GSC values on
-// the intake form, and these automated steps use them. Yamix runs LAST because
-// creating the Yamix project needs the GA4/GSC/SE Ranking values.
-const STEP_ORDER = ["manageWpHfcm", "seRanking", "yamix", "finalCheck"];
+// GA4 and GSC (property creation, tracking code, and GSC verification tag on the
+// site) are all done MANUALLY before the run. The operator enters the GA4 Property
+// ID on the intake form. The automated flow is just SE Ranking then Yamix, which
+// creates the Yamix project from the GA4/GSC/SE Ranking values. Yamix runs last.
+const STEP_ORDER = ["seRanking", "yamix", "finalCheck"];
 
 const STEP_LABEL = {
-  manageWpHfcm: "ManageWP and HFCM",
   seRanking: "SE Ranking",
   yamix: "Yamix New Project",
   finalCheck: "Final check"

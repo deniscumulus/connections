@@ -238,10 +238,10 @@ function brandedKeywords({ hostname, projectName, seRankingKeywords }) {
 }
 
 function defaultSteps() {
-  // GA4 and GSC are done manually before the run, so they are not worker steps.
+  // GA4/GSC (incl. tracking code + verification tag on the site) are done manually
+  // before the run, so they are not worker steps.
   return {
     inputs: { status: "done", note: "" },
-    manageWpHfcm: { status: "todo", note: "" },
     seRanking: { status: "todo", note: "" },
     yamix: { status: "todo", note: "" },
     finalCheck: { status: "todo", note: "" }
@@ -284,7 +284,7 @@ function buildRun(input) {
       yamixMainProjectUrl: siteUrl
     },
     captured: {
-      ga4PropertyId: "",
+      ga4PropertyId: (input.ga4PropertyId || "").trim(),
       ga4MeasurementId: "",
       ga4WebStreamId: "",
       ga4BigQueryProjectId: bigQueryProjectId,

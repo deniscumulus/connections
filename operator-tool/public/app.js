@@ -16,14 +16,8 @@ const stepMeta = [
   {
     key: "inputs",
     title: "Inputs",
-    text: "Run created from the intake form. GA4 and GSC are set up manually beforehand; their IDs and the GSC verification tag are entered on the form.",
+    text: "Run created from the intake form. GA4 and GSC (property, tracking code, verification) are set up manually beforehand; the GA4 Property ID is entered on the form.",
     links: []
-  },
-  {
-    key: "manageWpHfcm",
-    title: "ManageWP and HFCM",
-    text: "Automation opens WP Admin through ManageWP, adds GSC as an HTML header snippet and GA4 as a Javascript header snippet, then checks page source.",
-    links: [{ label: "Open ManageWP", href: "https://orion.managewp.com/login" }]
   },
   {
     key: "seRanking",
@@ -272,7 +266,7 @@ function needsOperator(run) {
 function automationFor(run) {
   return run.automation || {
     status: "queued_for_worker",
-    currentStep: "manageWpHfcm",
+    currentStep: "seRanking",
     message: "Queued for the deterministic backend worker.",
     worker: "backend_worker"
   };
@@ -615,7 +609,7 @@ function initialAutomationPatch(raw) {
     automation: {
       status: "queued_for_worker",
       worker: "backend_worker",
-      currentStep: "manageWpHfcm",
+      currentStep: "seRanking",
       startedAt: timestamp,
       message: "Create Run received. This run is queued for the deterministic backend worker."
     },
@@ -756,6 +750,7 @@ els.form.addEventListener("submit", async (event) => {
     projectName: raw.projectName,
     targetMarket: raw.targetMarket,
     googleEmail: raw.googleEmail,
+    ga4PropertyId: raw.ga4PropertyId,
     seRankingKeywords: raw.seRankingKeywords
   };
   const run = await api("/api/runs", {
