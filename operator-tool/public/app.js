@@ -519,7 +519,7 @@ function renderDetail() {
   els.empty.classList.add("hidden");
   els.detail.classList.remove("hidden");
   els.runTitle.textContent = run.projectName;
-  els.runSubtitle.textContent = `${run.siteUrl} | ${run.targetMarket || run.market || "No target market"} | ${run.googleEmail || "No Google email"}`;
+  els.runSubtitle.textContent = `${run.siteUrl} | ${run.targetMarket || run.market || "No target market"}`;
 
   const progress = progressFor(run);
   els.progressText.textContent = `${progress.percent}% complete`;
