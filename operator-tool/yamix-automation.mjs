@@ -49,10 +49,9 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await page.click("button:has-text('Log in')");
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    // 2. Settings > Projects > Create Project (confirmed navigation).
-    await page.goto("https://yamix.com/settings/projects");
+    // 2. Go straight to the create-project form (confirmed URL).
+    await page.goto("https://yamix.com/settings/create-project");
     await page.waitForLoadState();
-    await page.getByRole("button", { name: /create project/i }).first().click();
     await page.waitForTimeout(600);
 
     // 3. Fill the Basic Information fields (placeholders from the real form).
