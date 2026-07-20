@@ -206,7 +206,7 @@ const MARKET_LANGUAGE = {
   FR: "French",
   DK: "Danish",
   ES: "Spanish",
-  SV: "Spanish",
+  SV: "Swedish",
   CL: "Spanish"
 };
 
