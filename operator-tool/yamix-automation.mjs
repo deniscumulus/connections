@@ -61,24 +61,33 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await page.click("button:has-text('Log in')").catch(() => {});
     await pwField.press("Enter").catch(() => {});
 
-    // Confirm the login actually succeeded — the sign-in form should disappear.
-    // If it doesn't, surface any on-page error (e.g. "invalid credentials").
-    const loggedIn = await page
-      .locator('input[type="email"]')
-      .first()
-      .waitFor({ state: "detached", timeout: 15000 })
-      .then(() => true)
-      .catch(() => false);
+    // Confirm login succeeded (sign-in form goes away). Yamix shows errors as
+    // react-toastify toasts that vanish quickly, so poll for the toast text while
+    // waiting, instead of only reading the page once after a timeout.
+    let loggedIn = false;
+    let toastMsg = "";
+    for (let i = 0; i < 24; i += 1) {
+      const emailGone = await page
+        .locator('input[type="email"]')
+        .first()
+        .isVisible()
+        .then((v) => !v)
+        .catch(() => true);
+      if (emailGone) {
+        loggedIn = true;
+        break;
+      }
+      const toast = await page
+        .locator(".Toastify__toast, .Toastify")
+        .first()
+        .innerText()
+        .catch(() => "");
+      if (toast && toast.trim()) toastMsg = toast.trim().replace(/\s+/g, " ").slice(0, 160);
+      await page.waitForTimeout(500);
+    }
     if (!loggedIn) {
-      const bodyText = await page.locator("body").innerText().catch(() => "");
-      const errLine = (
-        bodyText
-          .split("\n")
-          .map((s) => s.trim())
-          .find((s) => /invalid|incorrect|wrong|error|failed|match|try again|credential/i.test(s)) || ""
-      ).slice(0, 140);
       throw new Error(
-        `Yamix login did not complete${errLine ? `: ${errLine}` : " (still on the sign-in form)"}`
+        `Yamix login did not complete${toastMsg ? `: "${toastMsg}"` : " (still on the sign-in form)"}`
       );
     }
     await page.waitForLoadState("networkidle").catch(() => {});
