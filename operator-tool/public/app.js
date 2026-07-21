@@ -135,6 +135,22 @@ async function showApp() {
   els.loginScreen?.classList.add("hidden");
   els.appShell?.classList.remove("hidden");
   await loadRuns();
+  startAutoRefresh();
+}
+
+// Poll the runs so status changes (worker progress) show without a manual refresh.
+function startAutoRefresh() {
+  if (state.refreshTimer) return;
+  state.refreshTimer = window.setInterval(() => {
+    loadRuns().catch(() => {});
+  }, 5000);
+}
+
+function stopAutoRefresh() {
+  if (state.refreshTimer) {
+    window.clearInterval(state.refreshTimer);
+    state.refreshTimer = null;
+  }
 }
 
 async function initAuth() {
@@ -163,6 +179,7 @@ els.loginForm?.addEventListener("submit", async (event) => {
 
 els.logout?.addEventListener("click", () => {
   window.sessionStorage.removeItem(AUTH_SESSION_KEY);
+  stopAutoRefresh();
   showLogin();
 });
 

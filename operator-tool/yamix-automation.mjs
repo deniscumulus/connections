@@ -50,9 +50,16 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await page.goto("https://yamix.com/auth/sign-in");
     await page.waitForLoadState().catch(() => {});
     await page.getByPlaceholder("example@gmail.com").first().waitFor({ state: "visible", timeout: 20000 });
-    await page.fill('input[type="email"]', yamixEmail);
-    await page.fill('input[type="password"]', yamixPassword);
-    await page.click("button:has-text('Log in')");
+    // Type into the fields (not instant fill) so React's controlled inputs update
+    // and the submit button enables. Submit via both click and Enter.
+    const emailField = page.locator('input[type="email"]').first();
+    const pwField = page.locator('input[type="password"]').first();
+    await emailField.click();
+    await emailField.pressSequentially(yamixEmail, { delay: 25 });
+    await pwField.click();
+    await pwField.pressSequentially(yamixPassword, { delay: 25 });
+    await page.click("button:has-text('Log in')").catch(() => {});
+    await pwField.press("Enter").catch(() => {});
 
     // Confirm the login actually succeeded — the sign-in form should disappear.
     // If it doesn't, surface any on-page error (e.g. "invalid credentials").
