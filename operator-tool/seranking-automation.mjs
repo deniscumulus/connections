@@ -1,7 +1,7 @@
 // SE Ranking via the official Project API (no browser, no reCAPTCHA).
 // Docs: https://seranking.com/api/project/project-management/
-// Auth: Authorization: Token <API key>. Creating a project uses the plan's
-// project limits, not API credits.
+// Auth: Authorization: Token <API key>. POST /project-management/sites needs only
+// { url, title } and returns 201 + the project id (authoritative).
 const SE_RANKING_API_BASE = "https://api.seranking.com/v1";
 
 function normalizeHost(value) {
@@ -12,76 +12,63 @@ function normalizeHost(value) {
     .toLowerCase();
 }
 
-// Creates (or reuses) the SE Ranking project for the run's domain, then VERIFIES
-// it exists in the sites list and returns that list id (authoritative). The
-// backlink monitor is keyed by the same site_id.
+function siteHost(s) {
+  return normalizeHost(s?.name || s?.domain || s?.url || s?.site);
+}
+
+// Creates (or reuses) the SE Ranking project for the run's domain and returns its
+// site_id (also used for the Backlinks Report ID — same key).
 export async function setupSERanking(run, apiKey) {
   try {
     if (!apiKey) {
-      return {
-        success: false,
-        needsOperator: true,
-        error: "SE Ranking API key not configured (SERANKING_API_KEY)."
-      };
+      return { success: false, needsOperator: true, error: "SE Ranking API key not configured (SERANKING_API_KEY)." };
     }
 
-    const headers = {
-      authorization: `Token ${apiKey}`,
-      "content-type": "application/json"
-    };
+    const headers = { authorization: `Token ${apiKey}`, "content-type": "application/json" };
     const targetHost = normalizeHost(run.hostname || run.siteUrl);
 
-    // Finds the site row for this domain in the sites list (the authoritative id).
-    async function findSite() {
-      const res = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, { headers });
-      if (!res.ok) return null;
+    // 1. Reuse an existing project for this domain. The sites list is paginated,
+    // so page through it rather than checking only the first page.
+    for (let page = 0; page < 12; page += 1) {
+      const res = await fetch(
+        `${SE_RANKING_API_BASE}/project-management/sites?limit=200&offset=${page * 200}`,
+        { headers }
+      );
+      if (!res.ok) break;
       const data = await res.json().catch(() => null);
       const arr = Array.isArray(data) ? data : Array.isArray(data?.sites) ? data.sites : [];
-      return (
-        arr.find((s) => normalizeHost(s.name || s.domain || s.url || s.site) === targetHost) || null
-      );
-    }
-
-    // 1. Reuse if a project for this domain already exists.
-    let site = await findSite();
-
-    // 2. Otherwise create it.
-    let createInfo = "";
-    if (!site) {
-      const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ url: run.siteUrl, title: run.projectName })
-      });
-      createInfo = `${createRes.status} ${(await createRes.text().catch(() => "")).slice(0, 160)}`.trim();
-      if (!createRes.ok) {
-        return { success: false, needsOperator: true, error: `SE Ranking create failed: ${createInfo}` };
+      if (!arr.length) break;
+      const match = arr.find((s) => siteHost(s) === targetHost);
+      if (match) {
+        const id = match.id || match.site_id;
+        return { success: true, seRankingProjectId: String(id), seRankingBacklinksReportId: String(id) };
       }
-      // Confirm it actually landed in the sites list (retry, the API can lag).
-      for (let i = 0; i < 4 && !site; i += 1) {
-        await new Promise((r) => setTimeout(r, 1500));
-        site = await findSite();
-      }
+      if (arr.length < 200) break; // last page reached
     }
 
-    if (!site) {
-      return {
-        success: false,
-        needsOperator: true,
-        error: `SE Ranking accepted the create but no project for ${targetHost} appears in the sites list (create: ${createInfo || "n/a"}). Nothing usable was captured.`
-      };
+    // 2. Create it. Trust the id SE Ranking returns (per their API docs).
+    const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ url: run.siteUrl, title: run.projectName })
+    });
+    const body = (await createRes.text().catch(() => "")).slice(0, 220);
+    if (!createRes.ok) {
+      return { success: false, needsOperator: true, error: `SE Ranking create failed: ${createRes.status} ${body}`.trim() };
     }
 
-    const siteId = site.id || site.site_id;
-    if (!siteId) {
-      return { success: false, needsOperator: true, error: "SE Ranking: found the site but it has no id in the list response." };
+    let created = {};
+    try {
+      created = JSON.parse(body);
+    } catch {
+      /* leave empty */
+    }
+    const id = created.site_id || created.id;
+    if (!id) {
+      return { success: false, needsOperator: true, error: `SE Ranking create returned no site_id. Response: ${body}` };
     }
 
-    return {
-      success: true,
-      seRankingProjectId: String(siteId),
-      seRankingBacklinksReportId: String(siteId)
-    };
+    return { success: true, seRankingProjectId: String(id), seRankingBacklinksReportId: String(id) };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
   }
