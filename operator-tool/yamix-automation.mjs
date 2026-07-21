@@ -33,19 +33,35 @@ async function fillByPlaceholder(page, placeholder, value) {
 // Kingdom" / "English"). Throws if a required option can't be selected.
 async function selectDropdown(page, triggerText, optionText, { required = true } = {}) {
   if (!optionText) return;
-  await page.getByText(triggerText, { exact: false }).first().click().catch(() => {});
-  await page.waitForTimeout(500);
-  const option = page.getByText(optionText, { exact: true }).first();
-  try {
-    await option.scrollIntoViewIfNeeded();
-    await option.click({ timeout: 8000 });
-  } catch {
-    await page.keyboard.press("Escape").catch(() => {});
-    if (required) {
-      throw new Error(`Could not select "${optionText}" in the "${triggerText}" dropdown`);
+  // Clean any open dropdown, then open this one by clicking its placeholder.
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.getByText(triggerText, { exact: false }).first().click({ timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(700);
+
+  // Try several ways to click the option (custom dropdowns vary in markup).
+  const candidates = [
+    page.getByRole("option", { name: optionText, exact: true }).first(),
+    page.getByRole("option", { name: optionText }).first(),
+    page.locator(`li:has-text("${optionText}")`).first(),
+    page.locator(`[role="option"]:has-text("${optionText}")`).first(),
+    page.getByText(optionText, { exact: true }).first()
+  ];
+  for (const el of candidates) {
+    if (!(await el.count().catch(() => 0))) continue;
+    try {
+      await el.scrollIntoViewIfNeeded();
+      await el.click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      return;
+    } catch {
+      /* try the next strategy */
     }
   }
-  await page.waitForTimeout(300);
+
+  await page.keyboard.press("Escape").catch(() => {});
+  if (required) {
+    throw new Error(`Could not select "${optionText}" in the "${triggerText}" dropdown`);
+  }
 }
 
 // Creates a new Yamix project and fills it with the run's derived dataset names,
