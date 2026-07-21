@@ -267,8 +267,13 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       return { success: true, yamixUpdated: true, message: `Yamix project "${run.projectName}" created and verified in the list.` };
     }
     if (/already exists|already taken/i.test(saveToast)) {
-      // The URL is already registered in Yamix — desired end state met (idempotent).
-      return { success: true, yamixUpdated: false, message: "A Yamix project for this URL already exists — treated as done." };
+      // NOT a success: Yamix rejected the URL but no project is in the list — a
+      // stale/orphaned URL (from a previously deleted project). Nothing was created.
+      return {
+        success: false,
+        needsOperator: true,
+        error: `Yamix rejected the URL as "already exists", but "${run.projectName}" is NOT in the projects list — a Yamix orphaned URL (leftover from a deleted project). The project was NOT created. Use a fresh URL, or have Yamix clear the stale URL.`
+      };
     }
     return {
       success: false,
