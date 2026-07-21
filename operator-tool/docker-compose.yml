@@ -13,15 +13,9 @@ services:
       BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
       BIGQUERY_CLOUD_PROJECT_ID: "${BIGQUERY_CLOUD_PROJECT_ID:-son-gcloud-452110-e8}"
       BIGQUERY_DATA_LOCATION: "${BIGQUERY_DATA_LOCATION:-Frankfurt (europe-west3)}"
-      GOOGLE_EMAIL: ${GOOGLE_EMAIL}
-      GOOGLE_PASSWORD: ${GOOGLE_PASSWORD}
-      MANAGEWP_EMAIL: ${MANAGEWP_EMAIL}
-      MANAGEWP_PASSWORD: ${MANAGEWP_PASSWORD}
-      YAMIX_EMAIL: ${YAMIX_EMAIL}
-      YAMIX_PASSWORD: ${YAMIX_PASSWORD}
-      SERANKING_EMAIL: ${SERANKING_EMAIL}
-      SERANKING_PASSWORD: ${SERANKING_PASSWORD}
-      SERANKING_API_KEY: ${SERANKING_API_KEY}
+      # Credentials (GOOGLE_/MANAGEWP_/YAMIX_/SERANKING_) come from env_file .env
+      # LITERALLY. Do NOT list them here with ${VAR} — docker-compose interpolation
+      # mangles "$" characters in passwords (e.g. Denis1410$$$), breaking login.
     ports:
       - "4173:4173"
     volumes:
@@ -47,12 +41,5 @@ services:
       WORKER_POLL_INTERVAL_MS: "15000"
       BIGQUERY_CLOUD_PROJECT_ID: "${BIGQUERY_CLOUD_PROJECT_ID:-son-gcloud-452110-e8}"
       BIGQUERY_DATA_LOCATION: "${BIGQUERY_DATA_LOCATION:-Frankfurt (europe-west3)}"
-      GOOGLE_EMAIL: ${GOOGLE_EMAIL}
-      GOOGLE_PASSWORD: ${GOOGLE_PASSWORD}
-      MANAGEWP_EMAIL: ${MANAGEWP_EMAIL}
-      MANAGEWP_PASSWORD: ${MANAGEWP_PASSWORD}
-      YAMIX_EMAIL: ${YAMIX_EMAIL}
-      YAMIX_PASSWORD: ${YAMIX_PASSWORD}
-      SERANKING_EMAIL: ${SERANKING_EMAIL}
-      SERANKING_PASSWORD: ${SERANKING_PASSWORD}
-      SERANKING_API_KEY: ${SERANKING_API_KEY}
+      # Credentials come from env_file .env LITERALLY — see note above; do not add
+      # ${VAR} lines here (interpolation mangles "$" in passwords).

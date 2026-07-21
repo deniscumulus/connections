@@ -86,8 +86,19 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       await page.waitForTimeout(500);
     }
     if (!loggedIn) {
+      // Also read the persistent inline validation errors under the fields
+      // (e.g. "Password must contain at least one uppercase letter"), which reveal
+      // whether the password/email reaching the worker is invalid or mangled.
+      const formText = await page.locator("form").first().innerText().catch(() => "");
+      const inlineErr = formText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => /invalid|must|required|least|uppercase|lowercase|match|format|character|credential|incorrect|wrong/i.test(s))
+        .join("; ")
+        .slice(0, 200);
+      const detail = [toastMsg, inlineErr].filter(Boolean).join(" | ");
       throw new Error(
-        `Yamix login did not complete${toastMsg ? `: "${toastMsg}"` : " (still on the sign-in form)"}`
+        `Yamix login did not complete${detail ? `: ${detail}` : " (still on the sign-in form)"}`
       );
     }
     await page.waitForLoadState("networkidle").catch(() => {});
