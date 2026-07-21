@@ -27,6 +27,24 @@ async function fillByPlaceholder(page, placeholder, value) {
   await field.fill(String(value));
 }
 
+// Fill the first locator that actually exists (avoids a 30s hang on a guessed
+// selector). Returns true if something was filled.
+async function fillFirstAvailable(page, locators, value) {
+  if (value == null || value === "") return false;
+  for (const loc of locators) {
+    const el = loc.first();
+    if (await el.count().catch(() => 0)) {
+      try {
+        await el.fill(String(value));
+        return true;
+      } catch {
+        /* try the next locator */
+      }
+    }
+  }
+  return false;
+}
+
 // Select an option in Yamix's custom dropdowns (Parent, Market, Language): click
 // the control showing `triggerText` to open it, then click the option whose exact
 // label is `optionText` (Market/Language options are full names like "United
@@ -181,6 +199,17 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
 
     // 3. Fill the Basic Information fields (placeholders from the real form).
     await fillByPlaceholder(page, "Enter main project URL", run.siteUrl);
+    // Project name (required). Not in the Basic Information block — try its label
+    // and a few likely placeholders. Value is the derived "<Casino> <MARKET>".
+    await fillFirstAvailable(
+      page,
+      [
+        page.getByLabel("Project name", { exact: false }),
+        page.getByPlaceholder("Enter project name", { exact: false }),
+        page.getByPlaceholder("project name", { exact: false })
+      ],
+      run.projectName
+    );
     // Parent project is optional (no red *), so don't fail the run if it's missing.
     await selectDropdown(page, "Select parent project", run.defaults?.yamixParentProject || "SKY Rocket", {
       required: false
