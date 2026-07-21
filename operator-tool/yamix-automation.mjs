@@ -230,55 +230,50 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await saveBtn.scrollIntoViewIfNeeded().catch(() => {});
     await saveBtn.click({ timeout: 8000 });
 
-    // 5. Poll for the outcome: a success toast, navigation away, or an error toast
-    // (Yamix toasts vanish quickly, so poll instead of reading once).
-    let saveOk = false;
+    // Capture any toast that appears (success, or "already exists", etc.).
     let saveToast = "";
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 8; i += 1) {
       const toast = await page.locator(".Toastify").first().innerText().catch(() => "");
-      if (toast && toast.trim()) saveToast = toast.trim().replace(/\s+/g, " ").slice(0, 180);
-      if (/success|created|saved|added/i.test(saveToast)) {
-        saveOk = true;
+      if (toast && toast.trim()) {
+        saveToast = toast.trim().replace(/\s+/g, " ").slice(0, 180);
         break;
       }
-      const stillOnForm = await page
-        .getByPlaceholder("Enter main project URL")
+      await page.waitForTimeout(400);
+    }
+    await page.waitForTimeout(1500);
+
+    // 5. Ground-truth verification: does the project now appear in the list?
+    let created = false;
+    try {
+      await page.goto("https://yamix.com/settings/projects");
+      await page.waitForLoadState().catch(() => {});
+      const search = page.getByPlaceholder("Search", { exact: false }).first();
+      if (await search.count().catch(() => 0)) {
+        await search.fill(run.projectName).catch(() => {});
+        await page.waitForTimeout(1500);
+      }
+      created = await page
+        .getByText(run.projectName, { exact: false })
         .first()
         .isVisible()
         .catch(() => false);
-      if (!stillOnForm) {
-        saveOk = true;
-        break;
-      }
-      await page.waitForTimeout(500);
-    }
-
-    if (!saveOk && /already exists|already taken/i.test(saveToast)) {
-      // A project for this URL is already in Yamix — the desired end state is met.
-      // Treat as done so the tool is idempotent (safe to re-run a known site).
-      await browser.close();
-      return {
-        success: true,
-        yamixUpdated: false,
-        message: "A Yamix project for this URL already exists — treated as done."
-      };
-    }
-
-    if (!saveOk) {
-      // Capture any inline validation text AND the toast, to see what blocked it.
-      const formText = await page.locator("form").first().innerText().catch(() => "");
-      const errs = formText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((s) => /required|invalid|must|select|please|least|match|only|maximum|minimum|exist|taken|already/i.test(s))
-        .join("; ")
-        .slice(0, 220);
-      const detail = [saveToast, errs].filter(Boolean).join(" | ");
-      throw new Error(`Yamix save did not complete${detail ? `: ${detail}` : " (still on the create form; no toast or validation text seen)"}`);
+    } catch {
+      /* fall through to failure handling */
     }
 
     await browser.close();
-    return { success: true, yamixUpdated: saveOk, message: "Yamix project created." };
+
+    if (created) {
+      return { success: true, yamixUpdated: true, message: `Yamix project "${run.projectName}" created and verified in the list.` };
+    }
+    if (/already exists|already taken/i.test(saveToast)) {
+      // The URL is already registered in Yamix — desired end state met (idempotent).
+      return { success: true, yamixUpdated: false, message: "A Yamix project for this URL already exists — treated as done." };
+    }
+    return {
+      success: false,
+      error: `Yamix project "${run.projectName}" not found in the list after Save${saveToast ? ` (toast: ${saveToast})` : " (no toast seen)"}`
+    };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
     // on the login root vs. the create-project form).
