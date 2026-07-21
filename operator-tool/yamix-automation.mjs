@@ -194,35 +194,51 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await selectDropdown(page, "Select Language", run.language);
     await fillByPlaceholder(page, "Enter regex pattern", run.defaults?.yamixRegexPattern || "");
 
-    // 4. Save (confirmed: "Save changes").
-    await page.getByRole("button", { name: /save changes/i }).first().click();
-    await page.waitForTimeout(2500);
+    // 4. Save. The submit button may read "Save changes" or "Create project".
+    const saveBtn = page
+      .getByRole("button", { name: /save changes|create project|^create$|^save$|submit/i })
+      .first();
+    await saveBtn.scrollIntoViewIfNeeded().catch(() => {});
+    await saveBtn.click({ timeout: 8000 });
 
-    // 5. VERIFY the save actually went through — do not report success blindly.
-    // Success = a success toast, or we navigated away from the create form. If we
-    // are still on the create form, the save failed (e.g. a required dropdown was
-    // not really selected) — surface the inline validation errors.
-    const toastText = await page.locator(".Toastify").first().innerText().catch(() => "");
-    const okToast = /success|created|saved|added/i.test(toastText);
-    const stillOnForm = await page
-      .getByPlaceholder("Enter main project URL")
-      .first()
-      .isVisible()
-      .catch(() => false);
+    // 5. Poll for the outcome: a success toast, navigation away, or an error toast
+    // (Yamix toasts vanish quickly, so poll instead of reading once).
+    let saveOk = false;
+    let saveToast = "";
+    for (let i = 0; i < 12; i += 1) {
+      const toast = await page.locator(".Toastify").first().innerText().catch(() => "");
+      if (toast && toast.trim()) saveToast = toast.trim().replace(/\s+/g, " ").slice(0, 180);
+      if (/success|created|saved|added/i.test(saveToast)) {
+        saveOk = true;
+        break;
+      }
+      const stillOnForm = await page
+        .getByPlaceholder("Enter main project URL")
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (!stillOnForm) {
+        saveOk = true;
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
 
-    if (!okToast && stillOnForm) {
+    if (!saveOk) {
+      // Capture any inline validation text AND the toast, to see what blocked it.
       const formText = await page.locator("form").first().innerText().catch(() => "");
       const errs = formText
         .split("\n")
         .map((s) => s.trim())
-        .filter((s) => /required|invalid|must|select|please|least|match|field/i.test(s))
+        .filter((s) => /required|invalid|must|select|please|least|match|only|maximum|minimum|exist|taken|already/i.test(s))
         .join("; ")
         .slice(0, 220);
-      throw new Error(`Yamix save did not complete${errs ? `: ${errs}` : " (still on the create form after Save)"}`);
+      const detail = [saveToast, errs].filter(Boolean).join(" | ");
+      throw new Error(`Yamix save did not complete${detail ? `: ${detail}` : " (still on the create form; no toast or validation text seen)"}`);
     }
 
     await browser.close();
-    return { success: true, yamixUpdated: okToast, message: "Yamix project created." };
+    return { success: true, yamixUpdated: saveOk, message: "Yamix project created." };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
     // on the login root vs. the create-project form).
