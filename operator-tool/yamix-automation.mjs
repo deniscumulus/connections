@@ -178,16 +178,33 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
 
     // 4. Save (confirmed: "Save changes").
     await page.getByRole("button", { name: /save changes/i }).first().click();
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
 
-    const saved = await page
-      .getByText(/created|saved|success|updated/i)
+    // 5. VERIFY the save actually went through — do not report success blindly.
+    // Success = a success toast, or we navigated away from the create form. If we
+    // are still on the create form, the save failed (e.g. a required dropdown was
+    // not really selected) — surface the inline validation errors.
+    const toastText = await page.locator(".Toastify").first().innerText().catch(() => "");
+    const okToast = /success|created|saved|added/i.test(toastText);
+    const stillOnForm = await page
+      .getByPlaceholder("Enter main project URL")
       .first()
-      .isVisible({ timeout: 3000 })
+      .isVisible()
       .catch(() => false);
 
+    if (!okToast && stillOnForm) {
+      const formText = await page.locator("form").first().innerText().catch(() => "");
+      const errs = formText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => /required|invalid|must|select|please|least|match|field/i.test(s))
+        .join("; ")
+        .slice(0, 220);
+      throw new Error(`Yamix save did not complete${errs ? `: ${errs}` : " (still on the create form after Save)"}`);
+    }
+
     await browser.close();
-    return { success: true, yamixUpdated: saved, message: "Yamix project created and filled." };
+    return { success: true, yamixUpdated: okToast, message: "Yamix project created." };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
     // on the login root vs. the create-project form).

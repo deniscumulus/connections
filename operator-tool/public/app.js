@@ -245,12 +245,15 @@ function statusLabel(status) {
 }
 
 function progressFor(run) {
-  const values = Object.values(run.steps || {});
-  const done = values.filter((step) => step.status === "done").length;
+  // Count only the steps in the current flow (stepMeta), so stale keys on older
+  // runs don't skew the total (e.g. an old run still carrying GA4/GSC steps).
+  const keys = stepMeta.map((step) => step.key);
+  const total = keys.length || 1;
+  const done = keys.filter((key) => run.steps?.[key]?.status === "done").length;
   return {
     done,
-    total: values.length || 1,
-    percent: Math.round((done / (values.length || 1)) * 100)
+    total,
+    percent: Math.round((done / total) * 100)
   };
 }
 
