@@ -12,10 +12,9 @@ function normalizeHost(value) {
     .toLowerCase();
 }
 
-// Creates (or reuses) the SE Ranking project for the run's domain and returns
-// the site_id, which is the SE Ranking Project ID. The backlink monitor is keyed
-// by the same site_id, so we use it for the Backlinks Report ID too.
-// NOTE: verify against Yamix whether "Backlinks Report ID" is a separate value.
+// Creates (or reuses) the SE Ranking project for the run's domain, then VERIFIES
+// it exists in the sites list and returns that list id (authoritative). The
+// backlink monitor is keyed by the same site_id.
 export async function setupSERanking(run, apiKey) {
   try {
     if (!apiKey) {
@@ -32,36 +31,50 @@ export async function setupSERanking(run, apiKey) {
     };
     const targetHost = normalizeHost(run.hostname || run.siteUrl);
 
-    // 1. Reuse an existing project for this domain if it already exists.
-    let siteId = null;
-    const listRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, { headers });
-    if (listRes.ok) {
-      const sites = await listRes.json();
-      if (Array.isArray(sites)) {
-        const match = sites.find(
-          (site) => normalizeHost(site.name || site.domain || site.url) === targetHost
-        );
-        if (match) siteId = match.id || match.site_id;
-      }
+    // Finds the site row for this domain in the sites list (the authoritative id).
+    async function findSite() {
+      const res = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, { headers });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      const arr = Array.isArray(data) ? data : Array.isArray(data?.sites) ? data.sites : [];
+      return (
+        arr.find((s) => normalizeHost(s.name || s.domain || s.url || s.site) === targetHost) || null
+      );
     }
 
+    // 1. Reuse if a project for this domain already exists.
+    let site = await findSite();
+
     // 2. Otherwise create it.
-    if (!siteId) {
+    let createInfo = "";
+    if (!site) {
       const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
         method: "POST",
         headers,
         body: JSON.stringify({ url: run.siteUrl, title: run.projectName })
       });
+      createInfo = `${createRes.status} ${(await createRes.text().catch(() => "")).slice(0, 160)}`.trim();
       if (!createRes.ok) {
-        const text = await createRes.text().catch(() => "");
-        return { success: false, error: `SE Ranking create failed: ${createRes.status} ${text}`.trim() };
+        return { success: false, needsOperator: true, error: `SE Ranking create failed: ${createInfo}` };
       }
-      const created = await createRes.json();
-      siteId = created.site_id || created.id;
+      // Confirm it actually landed in the sites list (retry, the API can lag).
+      for (let i = 0; i < 4 && !site; i += 1) {
+        await new Promise((r) => setTimeout(r, 1500));
+        site = await findSite();
+      }
     }
 
+    if (!site) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: `SE Ranking accepted the create but no project for ${targetHost} appears in the sites list (create: ${createInfo || "n/a"}). Nothing usable was captured.`
+      };
+    }
+
+    const siteId = site.id || site.site_id;
     if (!siteId) {
-      return { success: false, error: "SE Ranking: could not determine site_id from the API response." };
+      return { success: false, needsOperator: true, error: "SE Ranking: found the site but it has no id in the list response." };
     }
 
     return {
