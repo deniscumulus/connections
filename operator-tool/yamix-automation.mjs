@@ -230,19 +230,37 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await saveBtn.scrollIntoViewIfNeeded().catch(() => {});
     await saveBtn.click({ timeout: 8000 });
 
-    // Capture any toast that appears (success, or "already exists", etc.).
+    // Poll ~10s for a toast (success or error) or for the create form to close.
     let saveToast = "";
-    for (let i = 0; i < 8; i += 1) {
+    let leftForm = false;
+    for (let i = 0; i < 20; i += 1) {
       const toast = await page.locator(".Toastify").first().innerText().catch(() => "");
       if (toast && toast.trim()) {
-        saveToast = toast.trim().replace(/\s+/g, " ").slice(0, 180);
+        saveToast = toast.trim().replace(/\s+/g, " ").slice(0, 200);
+        if (/success|created|saved|added|already exists|already taken|duplicate|incorrect|invalid|required|error/i.test(saveToast)) break;
+      }
+      const onForm = await page.getByPlaceholder("Enter main project URL").first().isVisible().catch(() => false);
+      if (!onForm) {
+        leftForm = true;
         break;
       }
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(500);
     }
-    await page.waitForTimeout(1500);
+
+    // If still on the form and no useful toast, capture inline validation errors.
+    let inlineErr = "";
+    if (!leftForm && !saveToast) {
+      const formText = await page.locator("form").first().innerText().catch(() => "");
+      inlineErr = formText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => /required|invalid|must|select|please|least|match|only|maximum|minimum|exist|taken|already|duplicate|incorrect/i.test(s))
+        .join("; ")
+        .slice(0, 220);
+    }
 
     // 5. Ground-truth verification: does the project now appear in the list?
+    // Retry a few times in case Yamix commits the row a moment later.
     let created = false;
     try {
       await page.goto("https://yamix.com/settings/projects");
@@ -250,13 +268,15 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       const search = page.getByPlaceholder("Search", { exact: false }).first();
       if (await search.count().catch(() => 0)) {
         await search.fill(run.projectName).catch(() => {});
-        await page.waitForTimeout(1500);
       }
-      created = await page
-        .getByText(run.projectName, { exact: false })
-        .first()
-        .isVisible()
-        .catch(() => false);
+      for (let i = 0; i < 4 && !created; i += 1) {
+        await page.waitForTimeout(1200);
+        created = await page
+          .getByText(run.projectName, { exact: false })
+          .first()
+          .isVisible()
+          .catch(() => false);
+      }
     } catch {
       /* fall through to failure handling */
     }
@@ -275,9 +295,10 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
         error: `Yamix rejected the URL as "already exists", but "${run.projectName}" is NOT in the projects list — a Yamix orphaned URL (leftover from a deleted project). The project was NOT created. Use a fresh URL, or have Yamix clear the stale URL.`
       };
     }
+    const why = [saveToast && `toast: ${saveToast}`, inlineErr && `form: ${inlineErr}`].filter(Boolean).join(" | ");
     return {
       success: false,
-      error: `Yamix project "${run.projectName}" not found in the list after Save${saveToast ? ` (toast: ${saveToast})` : " (no toast seen)"}`
+      error: `Yamix project "${run.projectName}" not found in the list after Save${why ? ` (${why})` : " (no toast or form error seen)"}`
     };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
