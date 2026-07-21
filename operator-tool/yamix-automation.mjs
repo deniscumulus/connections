@@ -97,8 +97,12 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
         .join("; ")
         .slice(0, 200);
       const detail = [toastMsg, inlineErr].filter(Boolean).join(" | ");
+      // Safe diagnostic: show the email used and the password LENGTH (not the
+      // password), so we can tell if the wrong/empty/truncated value reached the
+      // worker vs. genuinely wrong credentials.
+      const creds = `[email: ${yamixEmail || "(empty)"}, pwLen: ${(yamixPassword || "").length}]`;
       throw new Error(
-        `Yamix login did not complete${detail ? `: ${detail}` : " (still on the sign-in form)"}`
+        `Yamix login did not complete${detail ? `: ${detail}` : " (still on the sign-in form)"} ${creds}`
       );
     }
     await page.waitForLoadState("networkidle").catch(() => {});
