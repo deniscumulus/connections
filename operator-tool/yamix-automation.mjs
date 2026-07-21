@@ -33,6 +33,7 @@ async function selectDropdown(page, triggerText, optionText) {
 // and their exact option labels — selectDropdown is best-effort until verified.
 export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
   let browser;
+  let page;
   try {
     if (!yamixEmail || !yamixPassword) {
       throw new Error("Yamix credentials missing. Configure YAMIX_EMAIL and YAMIX_PASSWORD env vars.");
@@ -40,7 +41,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
 
     browser = await chromium.launch();
     const context = await browser.newContext();
-    const page = await context.newPage();
+    page = await context.newPage();
 
     // 1. Login. The login form is at the root (yamix.com), not /login (which 404s).
     // Confirmed DOM: input[type=email] (placeholder "example@gmail.com"),
@@ -49,12 +50,24 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await page.fill('input[type="email"]', yamixEmail);
     await page.fill('input[type="password"]', yamixPassword);
     await page.click("button:has-text('Log in')");
-    await page.waitForLoadState("networkidle").catch(() => {});
 
-    // 2. Go straight to the create-project form (confirmed URL).
+    // Wait for login to actually complete before navigating away — the login
+    // form (email field) should disappear once authenticated.
+    await page
+      .locator('input[type="email"]')
+      .first()
+      .waitFor({ state: "detached", timeout: 20000 })
+      .catch(() => {});
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+
+    // 2. Open the create-project form and wait for it to actually render.
     await page.goto("https://yamix.com/settings/create-project");
-    await page.waitForLoadState();
-    await page.waitForTimeout(600);
+    await page.waitForLoadState().catch(() => {});
+    await page
+      .getByPlaceholder("Enter main project URL")
+      .first()
+      .waitFor({ state: "visible", timeout: 30000 });
 
     // 3. Fill the Basic Information fields (placeholders from the real form).
     await fillByPlaceholder(page, "Enter main project URL", run.siteUrl);
@@ -80,11 +93,14 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await browser.close();
     return { success: true, yamixUpdated: saved, message: "Yamix project created and filled." };
   } catch (error) {
+    // Include where the page ended up, so failures are diagnosable (e.g. still
+    // on the login root vs. the create-project form).
+    const where = page ? ` [at ${page.url()}]` : "";
     if (browser) await browser.close();
 
     if (/2FA|CAPTCHA|recaptcha/i.test(error.message)) {
-      return { success: false, needsOperator: true, error: error.message };
+      return { success: false, needsOperator: true, error: error.message + where };
     }
-    return { success: false, error: error.message };
+    return { success: false, error: error.message + where };
   }
 }
