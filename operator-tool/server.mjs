@@ -106,7 +106,10 @@ async function writeRuns(runs) {
 }
 
 function normalizeUrl(value) {
-  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  // Strip surrounding whitespace and any internal spaces (a stray space became
+  // "%20" and produced an invalid URL like freespinandwin.com/%20).
+  const cleaned = String(value || "").trim().replace(/\s+/g, "");
+  const withProtocol = /^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
   const url = new URL(withProtocol);
   url.pathname = url.pathname === "/" ? "/" : url.pathname.replace(/\/+$/, "");
   url.search = "";
