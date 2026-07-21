@@ -10,15 +10,27 @@ const basicAuthUser = process.env.BASIC_AUTH_USER || "";
 const basicAuthPassword = process.env.BASIC_AUTH_PASSWORD || "";
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS || 15000);
 
+// Passwords are transported base64-encoded (via *_B64 env vars) so special
+// characters like "$" survive the .env / docker-compose layers intact. Falls
+// back to the plain var for backward compatibility.
+function fromB64(value) {
+  if (!value) return "";
+  try {
+    return Buffer.from(value, "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
 // Server-side credentials (loaded from env vars, NOT from run)
 const credentials = {
-  googlePassword: process.env.GOOGLE_PASSWORD || "",
+  googlePassword: fromB64(process.env.GOOGLE_PASSWORD_B64) || process.env.GOOGLE_PASSWORD || "",
   managewpEmail: process.env.MANAGEWP_EMAIL || "",
-  managewpPassword: process.env.MANAGEWP_PASSWORD || "",
+  managewpPassword: fromB64(process.env.MANAGEWP_PASSWORD_B64) || process.env.MANAGEWP_PASSWORD || "",
   yamixEmail: process.env.YAMIX_EMAIL || "",
-  yamixPassword: process.env.YAMIX_PASSWORD || "",
+  yamixPassword: fromB64(process.env.YAMIX_PASSWORD_B64) || process.env.YAMIX_PASSWORD || "",
   seRankingEmail: process.env.SERANKING_EMAIL || "",
-  seRankingPassword: process.env.SERANKING_PASSWORD || "",
+  seRankingPassword: fromB64(process.env.SERANKING_PASSWORD_B64) || process.env.SERANKING_PASSWORD || "",
   seRankingApiKey: process.env.SERANKING_API_KEY || ""
 };
 
