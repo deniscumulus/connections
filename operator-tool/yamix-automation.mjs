@@ -70,10 +70,12 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
   await page.waitForTimeout(700);
 
   // Some dropdowns (e.g. Parent project) have a search box inside — type to filter.
+  let searched = false;
   const searchBox = page.getByPlaceholder(/search/i).first();
   if ((await searchBox.count().catch(() => 0)) && (await searchBox.isVisible().catch(() => false))) {
     await searchBox.fill(optionText).catch(() => {});
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(700);
+    searched = true;
   }
 
   const candidates = [
@@ -92,6 +94,13 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
       continue;
     }
     // Only treat it as done if the trigger no longer shows the placeholder.
+    if (!(await stillPlaceholder())) return;
+  }
+
+  // For a searchable dropdown, pressing Enter picks the top filtered match.
+  if (searched) {
+    await searchBox.press("Enter").catch(() => {});
+    await page.waitForTimeout(500);
     if (!(await stillPlaceholder())) return;
   }
 
