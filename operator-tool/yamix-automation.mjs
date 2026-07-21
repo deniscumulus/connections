@@ -253,6 +253,17 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       await page.waitForTimeout(500);
     }
 
+    if (!saveOk && /already exists|already taken/i.test(saveToast)) {
+      // A project for this URL is already in Yamix — the desired end state is met.
+      // Treat as done so the tool is idempotent (safe to re-run a known site).
+      await browser.close();
+      return {
+        success: true,
+        yamixUpdated: false,
+        message: "A Yamix project for this URL already exists — treated as done."
+      };
+    }
+
     if (!saveOk) {
       // Capture any inline validation text AND the toast, to see what blocked it.
       const formText = await page.locator("form").first().innerText().catch(() => "");
