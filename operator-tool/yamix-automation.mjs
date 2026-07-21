@@ -1,5 +1,24 @@
 import { chromium } from "playwright";
 
+// The Yamix Market dropdown uses full country names, not our 2-letter codes.
+const MARKET_NAME = {
+  GB: "United Kingdom",
+  US: "United States",
+  CA: "Canada",
+  AU: "Australia",
+  NZ: "New Zealand",
+  IE: "Ireland",
+  DE: "Germany",
+  BR: "Brazil",
+  NL: "Netherlands",
+  FI: "Finland",
+  FR: "France",
+  DK: "Denmark",
+  ES: "Spain",
+  SV: "Sweden",
+  CL: "Chile"
+};
+
 // Fill a Yamix text field by its placeholder (taken from the real "new project"
 // form: "Enter main project URL", "Enter GSC dataset name", etc.).
 async function fillByPlaceholder(page, placeholder, value) {
@@ -8,15 +27,25 @@ async function fillByPlaceholder(page, placeholder, value) {
   await field.fill(String(value));
 }
 
-// Best-effort select for Yamix's custom dropdowns (Parent project, Market,
-// Language): click the control showing `triggerText`, then click the option
-// matching `optionText`. NEEDS live verification — the exact DOM of these
-// dropdowns and the exact option labels are not confirmed yet.
-async function selectDropdown(page, triggerText, optionText) {
+// Select an option in Yamix's custom dropdowns (Parent, Market, Language): click
+// the control showing `triggerText` to open it, then click the option whose exact
+// label is `optionText` (Market/Language options are full names like "United
+// Kingdom" / "English"). Throws if a required option can't be selected.
+async function selectDropdown(page, triggerText, optionText, { required = true } = {}) {
   if (!optionText) return;
   await page.getByText(triggerText, { exact: false }).first().click().catch(() => {});
-  await page.waitForTimeout(400);
-  await page.getByText(optionText, { exact: true }).first().click().catch(() => {});
+  await page.waitForTimeout(500);
+  const option = page.getByText(optionText, { exact: true }).first();
+  try {
+    await option.scrollIntoViewIfNeeded();
+    await option.click({ timeout: 8000 });
+  } catch {
+    await page.keyboard.press("Escape").catch(() => {});
+    if (required) {
+      throw new Error(`Could not select "${optionText}" in the "${triggerText}" dropdown`);
+    }
+  }
+  await page.waitForTimeout(300);
 }
 
 // Creates a new Yamix project and fills it with the run's derived dataset names,
@@ -118,12 +147,16 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
 
     // 3. Fill the Basic Information fields (placeholders from the real form).
     await fillByPlaceholder(page, "Enter main project URL", run.siteUrl);
-    await selectDropdown(page, "Select parent project", run.defaults?.yamixParentProject || "SKY Rocket");
+    // Parent project is optional (no red *), so don't fail the run if it's missing.
+    await selectDropdown(page, "Select parent project", run.defaults?.yamixParentProject || "SKY Rocket", {
+      required: false
+    });
     await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
     await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
     await fillByPlaceholder(page, "Enter SERanking project ID", run.captured?.seRankingProjectId);
     await fillByPlaceholder(page, "Enter backlinks report ID", run.captured?.seRankingBacklinksReportId);
-    await selectDropdown(page, "Select Market", run.market);
+    // Market/Language are required; use the full names the Yamix dropdowns show.
+    await selectDropdown(page, "Select Market", MARKET_NAME[run.market] || run.market);
     await selectDropdown(page, "Select Language", run.language);
     await fillByPlaceholder(page, "Enter regex pattern", run.defaults?.yamixRegexPattern || "");
 
