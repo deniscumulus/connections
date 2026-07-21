@@ -246,26 +246,27 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await saveBtn.scrollIntoViewIfNeeded().catch(() => {});
     await saveBtn.click({ timeout: 8000 });
 
-    // Poll ~10s for a toast (success or error) or for the create form to close.
+    // Poll ~10s. The definitive success signal is Yamix navigating from
+    // /settings/create-project to the saved project at /settings/edit-project/{id}.
     let saveToast = "";
     let leftForm = false;
     for (let i = 0; i < 20; i += 1) {
+      if (/\/settings\/edit-project\//i.test(page.url())) {
+        leftForm = true;
+        break;
+      }
       const toast = await page.locator(".Toastify").first().innerText().catch(() => "");
       if (toast && toast.trim()) {
         saveToast = toast.trim().replace(/\s+/g, " ").slice(0, 200);
         if (/success|created|saved|added|already exists|already taken|duplicate|incorrect|invalid|required|error/i.test(saveToast)) break;
       }
-      const onForm = await page.getByPlaceholder("Enter main project URL").first().isVisible().catch(() => false);
-      if (!onForm) {
-        leftForm = true;
-        break;
-      }
       await page.waitForTimeout(500);
     }
 
-    // If still on the form and no useful toast, capture inline validation errors.
+    // If still on the create form and no useful toast, capture inline validation errors.
+    const onCreateForm = /\/settings\/create-project/i.test(page.url());
     let inlineErr = "";
-    if (!leftForm && !saveToast) {
+    if (onCreateForm && !saveToast) {
       const formText = await page.locator("form").first().innerText().catch(() => "");
       inlineErr = formText
         .split("\n")
