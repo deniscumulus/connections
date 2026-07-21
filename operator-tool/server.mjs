@@ -499,13 +499,13 @@ async function handleApi(req, res, url) {
         automation: {
           ...(runs[index].automation || {}),
           status: "running",
-          worker: "codex_thread",
+          worker: "backend_worker",
           claimedAt: now,
-          message: "Codex claimed this run and started setup."
+          message: "Setup in progress…"
         },
         logs: [
           ...(Array.isArray(runs[index].logs) ? runs[index].logs : []),
-          { at: now, level: "info", message: "Run claimed by Codex." }
+          { at: now, level: "info", message: "Run started by the backend worker." }
         ],
         updatedAt: now
       });

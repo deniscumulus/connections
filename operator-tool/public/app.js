@@ -505,7 +505,7 @@ function renderAutomationStatus(run) {
   els.currentStepTitle.textContent = step.title;
   els.currentStepMessage.textContent = blocked
     ? automation.message || note || "Automation needs a person to complete the current browser step."
-    : automation.message || note || step.text;
+    : step.text || note || automation.message || "";
 
   els.statusPill.textContent = statusLabel(status);
   els.statusPill.className = `pill ${statusClass(status)}`;
