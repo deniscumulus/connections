@@ -43,23 +43,39 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     const context = await browser.newContext();
     page = await context.newPage();
 
-    // 1. Login. The login form is at the root (yamix.com), not /login (which 404s).
-    // Confirmed DOM: input[type=email] (placeholder "example@gmail.com"),
-    // input[type=password], button "Log in" (type=submit). No CAPTCHA.
-    await page.goto("https://yamix.com");
+    // 1. Login at the canonical sign-in page. Wait for the form to render before
+    // filling (going to the root races a redirect to /auth/sign-in). Confirmed DOM:
+    // input[type=email] (placeholder "example@gmail.com"), input[type=password],
+    // button "Log in" (type=submit). No CAPTCHA.
+    await page.goto("https://yamix.com/auth/sign-in");
+    await page.waitForLoadState().catch(() => {});
+    await page.getByPlaceholder("example@gmail.com").first().waitFor({ state: "visible", timeout: 20000 });
     await page.fill('input[type="email"]', yamixEmail);
     await page.fill('input[type="password"]', yamixPassword);
     await page.click("button:has-text('Log in')");
 
-    // Wait for login to actually complete before navigating away — the login
-    // form (email field) should disappear once authenticated.
-    await page
+    // Confirm the login actually succeeded — the sign-in form should disappear.
+    // If it doesn't, surface any on-page error (e.g. "invalid credentials").
+    const loggedIn = await page
       .locator('input[type="email"]')
       .first()
-      .waitFor({ state: "detached", timeout: 20000 })
-      .catch(() => {});
+      .waitFor({ state: "detached", timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!loggedIn) {
+      const bodyText = await page.locator("body").innerText().catch(() => "");
+      const errLine = (
+        bodyText
+          .split("\n")
+          .map((s) => s.trim())
+          .find((s) => /invalid|incorrect|wrong|error|failed|match|try again|credential/i.test(s)) || ""
+      ).slice(0, 140);
+      throw new Error(
+        `Yamix login did not complete${errLine ? `: ${errLine}` : " (still on the sign-in form)"}`
+      );
+    }
     await page.waitForLoadState("networkidle").catch(() => {});
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1000);
 
     // 2. Open the create-project form and wait for it to actually render.
     await page.goto("https://yamix.com/settings/create-project");
