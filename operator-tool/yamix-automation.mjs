@@ -283,22 +283,35 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
 
     await browser.close();
 
-    if (created) {
-      return { success: true, yamixUpdated: true, message: `Yamix project "${run.projectName}" created and verified in the list.` };
-    }
+    // Hard rejections from Yamix — the project was NOT created.
     if (/already exists|already taken/i.test(saveToast)) {
-      // NOT a success: Yamix rejected the URL but no project is in the list — a
-      // stale/orphaned URL (from a previously deleted project). Nothing was created.
       return {
         success: false,
         needsOperator: true,
-        error: `Yamix rejected the URL as "already exists", but "${run.projectName}" is NOT in the projects list — a Yamix orphaned URL (leftover from a deleted project). The project was NOT created. Use a fresh URL, or have Yamix clear the stale URL.`
+        error: `Yamix rejected the URL as "already exists" — a project with this URL is already in Yamix (or a stale/orphaned URL from a deleted project). Nothing new was created.`
       };
     }
-    const why = [saveToast && `toast: ${saveToast}`, inlineErr && `form: ${inlineErr}`].filter(Boolean).join(" | ");
+    if (/duplicate|incorrect|invalid|required/i.test(saveToast) || inlineErr) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: `Yamix rejected the save: ${saveToast || inlineErr}`
+      };
+    }
+
+    // Success: found in the list, OR the create form closed (Yamix moved to the
+    // saved project), OR a success toast appeared.
+    if (created || leftForm || /success|created|saved|added/i.test(saveToast)) {
+      return {
+        success: true,
+        yamixUpdated: created,
+        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.`
+      };
+    }
+
     return {
       success: false,
-      error: `Yamix project "${run.projectName}" not found in the list after Save${why ? ` (${why})` : " (no toast or form error seen)"}`
+      error: `Yamix save outcome unclear for "${run.projectName}" (no toast, no error, not confirmed in the list).`
     };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
