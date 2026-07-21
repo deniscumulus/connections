@@ -69,6 +69,13 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
   }
   await page.waitForTimeout(700);
 
+  // Some dropdowns (e.g. Parent project) have a search box inside — type to filter.
+  const searchBox = page.getByPlaceholder(/search/i).first();
+  if ((await searchBox.count().catch(() => 0)) && (await searchBox.isVisible().catch(() => false))) {
+    await searchBox.fill(optionText).catch(() => {});
+    await page.waitForTimeout(600);
+  }
+
   const candidates = [
     page.getByRole("option", { name: optionText, exact: true }).first(),
     page.getByRole("option", { name: optionText }).first(),
