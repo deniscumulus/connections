@@ -289,7 +289,7 @@ async function handleStepAutomation(run, stepKey) {
     console.log(`[worker] Yamix project created for run ${run.id}`);
     return {
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "Yamix project created with GA4, GSC and SE Ranking IDs." }
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: result.message || "Yamix project created with GA4, GSC and SE Ranking IDs." }
       },
       confirmations: {
         ...(run.confirmations || {}),
