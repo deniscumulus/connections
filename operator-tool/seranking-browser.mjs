@@ -8,7 +8,9 @@
 // Built from Denis's wizard screenshots (2026-07-22): 6 steps — General info,
 // Search engines, Keywords, Prompts (skip), Competitors (skip), Statistics (skip).
 // UNVERIFIED DOM: selectors are best-effort; expect a few test-and-fix rounds.
-import { chromium } from "playwright";
+//
+// playwright is imported lazily inside the function so a module-load issue can
+// never crash the worker on startup (which would leave runs stuck "queued").
 
 // Market code -> the country label shown in the wizard's Country dropdown.
 const MARKET_COUNTRY = {
@@ -71,6 +73,7 @@ export async function setupSERankingBrowser(run, email, password) {
       return { success: false, needsOperator: true, error: "SE Ranking login not configured (SERANKING_EMAIL / SERANKING_PASSWORD)." };
     }
 
+    const { chromium } = await import("playwright");
     browser = await chromium.launch();
     const context = await browser.newContext();
     const page = await context.newPage();
