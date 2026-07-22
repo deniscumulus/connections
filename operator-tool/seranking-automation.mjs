@@ -86,13 +86,36 @@ export async function setupSERanking(run, apiKey) {
       };
     }
 
-    // 2. Create it. Ask for an ACTIVE site (is_active=0 creates a "delayed" site
-    // that may not show up in the account). No group — Denis's groups are locked
-    // sub-account folders and can't take API-created sites, so leave it ungrouped.
+    // Find the target group. Grouped sites (group_id != 0) show in the dashboard;
+    // ungrouped (group_id 0) do NOT — that's the difference between visible real
+    // projects (StreetRocket) and our created ones. Endpoint verified:
+    // GET /project-management/sites/groups -> [{id,name}] (StreetRocket = 35083).
+    const GROUP_NAME = run.defaults?.seRankingGroup || "StreetRocket";
+    let siteGroupId = null;
+    let groupDetail = "";
+    try {
+      const gRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites/groups`, { headers });
+      if (gRes.ok) {
+        const groups = await gRes.json().catch(() => []);
+        const arr = Array.isArray(groups) ? groups : groups?.groups || [];
+        const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
+        const match = arr.find((x) => norm(x.name) === norm(GROUP_NAME));
+        if (match) siteGroupId = match.id;
+        else groupDetail = `group "${GROUP_NAME}" not found`;
+      } else {
+        groupDetail = `groups list failed: ${gRes.status}`;
+      }
+    } catch (e) {
+      groupDetail = `groups error: ${e.message}`;
+    }
+
+    // 2. Create it. ACTIVE + in the target group.
+    const createPayload = { url: run.siteUrl, title: run.projectName, is_active: 1 };
+    if (siteGroupId != null) createPayload.site_group_id = Number(siteGroupId);
     const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ url: run.siteUrl, title: run.projectName, is_active: 1 })
+      body: JSON.stringify(createPayload)
     });
     const body = (await createRes.text().catch(() => "")).slice(0, 240);
     if (!createRes.ok) {
@@ -206,12 +229,14 @@ export async function setupSERanking(run, apiKey) {
     // honestly instead of passing a phantom id downstream to Yamix.
     let verified = false;
     let after = [];
+    let createdSite = null;
     for (let i = 0; i < 3 && !verified; i += 1) {
       await new Promise((r) => setTimeout(r, 1500));
       after = await listSites();
-      verified = after.some(
+      createdSite = after.find(
         (s) => siteHost(s) === targetHost || String(s.id || s.site_id) === String(id)
       );
+      verified = Boolean(createdSite);
     }
     const sampleHosts = after.slice(0, 4).map(siteHost).filter(Boolean).join(", ");
     const accountInfo = `API account sees ${after.length} sites (e.g. ${sampleHosts})`;
@@ -224,11 +249,21 @@ export async function setupSERanking(run, apiKey) {
       };
     }
 
+    // Did the group actually stick? Grouped (group_id != 0) = visible in the
+    // dashboard; still 0 means the create ignored site_group_id (locked group)
+    // and we need a separate move call.
+    const actualGroup = createdSite.group_id;
+    const groupNote = siteGroupId
+      ? actualGroup && String(actualGroup) !== "0"
+        ? `in group ${actualGroup}`
+        : `GROUP NOT APPLIED (still group_id ${actualGroup}; wanted ${siteGroupId})`
+      : groupDetail || "no group";
+
     return {
       success: true,
       seRankingProjectId: String(id),
       seRankingBacklinksReportId: String(id),
-      detail: `Created SE Ranking project (site_id ${id}), ${engineDetail}, ${keywordDetail}, verified.`
+      detail: `Created SE Ranking project (site_id ${id}), ${groupNote}, ${engineDetail}, ${keywordDetail}, verified.`
     };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
