@@ -37,15 +37,20 @@ const MARKET_ENGINE_COUNTRY = {
   CL: ["chile"]
 };
 
-// Pick the Google search engine matching the run's market from the account's
-// engine list (each is { id, name, regionid }).
-function pickGoogleEngine(engines, market) {
-  const google = engines.filter((e) => /google/i.test(e?.name || ""));
+// Pick the Google search engines matching the run's market — both the desktop
+// ("Google United Kingdom") and mobile ("Google Mobile United Kingdom") entries,
+// like the manual wizard adds. Each engine is { id, name, regionid }. Excludes
+// Maps/Images/News/etc.
+function pickGoogleEngines(engines, market) {
+  const EXCLUDE = /maps|image|news|shopping|youtube|video|local/i;
+  const google = engines.filter(
+    (e) => /^google\b/i.test(String(e?.name || "").trim()) && !EXCLUDE.test(String(e?.name || ""))
+  );
   for (const keyword of MARKET_ENGINE_COUNTRY[market] || []) {
-    const match = google.find((e) => (e.name || "").toLowerCase().includes(keyword));
-    if (match) return match;
+    const matches = google.filter((e) => String(e.name || "").toLowerCase().includes(keyword));
+    if (matches.length) return matches; // desktop + mobile for this country
   }
-  return null;
+  return [];
 }
 
 // Creates (or reuses) the SE Ranking project for the run's domain and returns its
@@ -104,44 +109,49 @@ export async function setupSERanking(run, apiKey) {
       return { success: false, needsOperator: true, error: `SE Ranking create returned no site_id. Response: ${body}` };
     }
 
-    // 3. Add a Google search engine for the market. A bare url+title site does
-    // not surface in the Projects UI; adding an engine makes it a real tracked
-    // project. If this fails, we stop with the reason (below) so it's visible.
+    // 3. Add Google search engines (desktop + mobile) for the market — like the
+    // wizard's step 2. A bare url+title site doesn't surface in the Projects UI;
+    // engines + keywords make it a real tracked project. Collect each engine's
+    // site_engine_id (returned by the add call) to attach keywords to them.
     let engineDetail = "no search engine added";
     let engineAdded = false;
-    let siteEngineId = null;
+    const siteEngineIds = [];
     try {
       const seRes = await fetch(`${SE_RANKING_API_BASE}/project-management/system/search-engines`, { headers });
       if (seRes.ok) {
         const list = await seRes.json().catch(() => []);
-        const engine = pickGoogleEngine(Array.isArray(list) ? list : list?.search_engines || [], run.market);
-        if (engine) {
-          // site_id goes in the QUERY STRING (not the body) per the API — sending
-          // it in the body made the endpoint reject with a bogus "Project name"
-          // 400. Body carries the engine + a country-level region (0).
-          const addRes = await fetch(
-            `${SE_RANKING_API_BASE}/project-management/sites/search-engines?site_id=${Number(id)}`,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ search_engine_id: Number(engine.id), region_id: 0 })
+        const engineList = pickGoogleEngines(Array.isArray(list) ? list : list?.search_engines || [], run.market);
+        if (engineList.length) {
+          const added = [];
+          let lastErr = "";
+          for (const engine of engineList) {
+            // site_id goes in the QUERY STRING (not the body) per the API.
+            const addRes = await fetch(
+              `${SE_RANKING_API_BASE}/project-management/sites/search-engines?site_id=${Number(id)}`,
+              {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ search_engine_id: Number(engine.id), region_id: 0 })
+              }
+            );
+            const addBody = await addRes.text().catch(() => "");
+            if (addRes.ok) {
+              engineAdded = true;
+              added.push(engine.name);
+              try {
+                const parsed = JSON.parse(addBody);
+                const seid = parsed.site_engine_id || parsed.id;
+                if (seid) siteEngineIds.push(Number(seid));
+              } catch {
+                /* leave */
+              }
+            } else {
+              lastErr = `${addRes.status} ${addBody.slice(0, 120)}`;
             }
-          );
-          const addBody = await addRes.text().catch(() => "");
-          if (addRes.ok) {
-            engineAdded = true;
-            // The response returns site_engine_id — the project-local engine id
-            // needed to attach keywords to this engine.
-            try {
-              const parsed = JSON.parse(addBody);
-              siteEngineId = parsed.site_engine_id || parsed.id || null;
-            } catch {
-              /* leave null */
-            }
-            engineDetail = `added engine "${engine.name}"`;
-          } else {
-            engineDetail = `engine add failed: ${addRes.status} ${addBody.slice(0, 160)}`;
           }
+          engineDetail = engineAdded
+            ? `added engines: ${added.join(", ")}`
+            : `engine add failed: ${lastErr}`;
         } else {
           engineDetail = `no Google engine matched market "${run.market}"`;
         }
@@ -175,7 +185,7 @@ export async function setupSERanking(run, apiKey) {
     if (keywords.length) {
       try {
         const kwBody = keywords.map((keyword) =>
-          siteEngineId ? { keyword, site_engine_ids: [Number(siteEngineId)] } : { keyword }
+          siteEngineIds.length ? { keyword, site_engine_ids: siteEngineIds } : { keyword }
         );
         const kwRes = await fetch(`${SE_RANKING_API_BASE}/project-management/keywords?site_id=${Number(id)}`, {
           method: "POST",
