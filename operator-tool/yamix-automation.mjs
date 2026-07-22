@@ -447,10 +447,14 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // Success: found in the list, OR the create form closed (Yamix moved to the
     // saved project), OR a success toast appeared.
     if (created || leftForm || /success|created|saved|added/i.test(saveToast)) {
+      // Surface failed requests even on success, so we can see if the Parent
+      // project-groups fetch is erroring in the automation session.
+      const failed = (page._failedRequests || []).slice(-5);
+      const failedNote = parentDiag && failed.length ? ` [failed: ${failed.join(" ; ")}]` : "";
       return {
         success: true,
         yamixUpdated: created,
-        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.${parentDiag ? ` Parent: ${parentDiag}` : " Parent: SKY Rocket selected."}`
+        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.${parentDiag ? ` Parent: ${parentDiag}` : " Parent: SKY Rocket selected."}${failedNote}`
       };
     }
 
