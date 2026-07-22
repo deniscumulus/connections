@@ -190,7 +190,19 @@ function splitCompactBrand(value) {
     index = nextIndex;
   }
 
-  return words.filter(Boolean);
+  // Merge stray single-letter fragments (usually a plural "s" left over after a
+  // brand term matched the singular) into the previous word, so "torontoclubs"
+  // becomes ["toronto","clubs"] -> "Toronto Clubs", not "Toronto Club S".
+  const merged = [];
+  for (const word of words.filter(Boolean)) {
+    if (word.length === 1 && merged.length) {
+      merged[merged.length - 1] += word;
+    } else {
+      merged.push(word);
+    }
+  }
+
+  return merged;
 }
 
 // Language is derived from the market. Values are best-effort; the exact labels

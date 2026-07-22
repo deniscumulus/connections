@@ -69,13 +69,25 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
   }
   await page.waitForTimeout(700);
 
-  // Some dropdowns (e.g. Parent project) have a search box inside — type to filter.
+  // Some dropdowns (e.g. Parent project) have a search box inside — type to
+  // filter. Prefer the react-select input (id `react-select-*-input`) which is
+  // the real editable control; fall back to a visible search placeholder. Type
+  // with pressSequentially so react-select's onChange fires.
   let searched = false;
-  const searchBox = page.getByPlaceholder(/search/i).first();
+  let searchBox = page.locator('input[id^="react-select"]').first();
+  if (!(await searchBox.count().catch(() => 0)) || !(await searchBox.isVisible().catch(() => false))) {
+    searchBox = page.getByPlaceholder(/search/i).first();
+  }
   if ((await searchBox.count().catch(() => 0)) && (await searchBox.isVisible().catch(() => false))) {
-    await searchBox.fill(optionText).catch(() => {});
-    await page.waitForTimeout(700);
+    await searchBox.click().catch(() => {});
+    await searchBox.fill("").catch(() => {});
+    await searchBox.pressSequentially(optionText, { delay: 40 }).catch(() => {});
+    await page.waitForTimeout(800);
     searched = true;
+    // react-select highlights the first filtered match; Enter selects it.
+    await searchBox.press("Enter").catch(() => {});
+    await page.waitForTimeout(500);
+    if (!(await stillPlaceholder())) return;
   }
 
   const candidates = [
@@ -97,8 +109,10 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
     if (!(await stillPlaceholder())) return;
   }
 
-  // For a searchable dropdown, pressing Enter picks the top filtered match.
+  // Last resort for a searchable dropdown: ArrowDown to highlight, then Enter.
   if (searched) {
+    await searchBox.press("ArrowDown").catch(() => {});
+    await page.waitForTimeout(200);
     await searchBox.press("Enter").catch(() => {});
     await page.waitForTimeout(500);
     if (!(await stillPlaceholder())) return;
