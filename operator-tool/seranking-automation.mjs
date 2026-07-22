@@ -93,7 +93,7 @@ export async function setupSERanking(run, apiKey) {
     let siteGroupId = null;
     let groupDetail = "";
     try {
-      const gRes = await fetch(`${SE_RANKING_API_BASE}/project/project-groups/`, { headers });
+      const gRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites/groups`, { headers });
       if (gRes.ok) {
         const groups = await gRes.json().catch(() => []);
         const arr = Array.isArray(groups) ? groups : groups?.groups || [];
