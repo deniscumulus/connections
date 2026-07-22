@@ -106,30 +106,44 @@ export async function setupSERanking(run, apiKey) {
 
     // 3. Add a Google search engine for the market. A bare url+title site does
     // not surface in the Projects UI; adding an engine makes it a real tracked
-    // project. Best-effort — don't fail the run if the engine step fails.
+    // project. If this fails, we stop with the reason (below) so it's visible.
     let engineDetail = "no search engine added";
+    let engineAdded = false;
     try {
       const seRes = await fetch(`${SE_RANKING_API_BASE}/project-management/system/search-engines`, { headers });
       if (seRes.ok) {
         const list = await seRes.json().catch(() => []);
         const engine = pickGoogleEngine(Array.isArray(list) ? list : list?.search_engines || [], run.market);
         if (engine) {
+          const payload = { site_id: Number(id), search_engine_id: Number(engine.id) };
+          if (engine.regionid) payload.region_id = Number(engine.regionid);
           const addRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites/search-engines`, {
             method: "POST",
             headers,
-            body: JSON.stringify({ site_id: Number(id), search_engine_id: Number(engine.id) })
+            body: JSON.stringify(payload)
           });
-          engineDetail = addRes.ok
-            ? `added engine "${engine.name}"`
-            : `engine add failed: ${addRes.status} ${(await addRes.text().catch(() => "")).slice(0, 140)}`;
+          if (addRes.ok) {
+            engineAdded = true;
+            engineDetail = `added engine "${engine.name}" (id ${engine.id})`;
+          } else {
+            engineDetail = `engine add failed: ${addRes.status} ${(await addRes.text().catch(() => "")).slice(0, 160)}`;
+          }
         } else {
           engineDetail = `no Google engine matched market "${run.market}"`;
         }
       } else {
-        engineDetail = `engine list failed: ${seRes.status}`;
+        engineDetail = `engine list failed: ${seRes.status} ${(await seRes.text().catch(() => "")).slice(0, 120)}`;
       }
     } catch (e) {
       engineDetail = `engine error: ${e.message}`;
+    }
+
+    if (!engineAdded) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: `SE Ranking site created (site_id ${id}) but adding the search engine failed, so it won't show as a project. Reason: ${engineDetail}`
+      };
     }
 
     // 4. Verify the project actually appears in the account. A returned site_id
