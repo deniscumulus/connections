@@ -86,40 +86,13 @@ export async function setupSERanking(run, apiKey) {
       };
     }
 
-    // Find the target group so the site lands in the right folder. Casino sites
-    // go into "StreetRocket"; an ungrouped site (group_id 0) doesn't show where
-    // the operator browses. Match by name from GET /project/project-groups/.
-    const GROUP_NAME = run.defaults?.seRankingGroup || "StreetRocket";
-    let siteGroupId = null;
-    let groupDetail = "";
-    try {
-      const gRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites/groups`, { headers });
-      if (gRes.ok) {
-        const groups = await gRes.json().catch(() => []);
-        const arr = Array.isArray(groups) ? groups : groups?.groups || [];
-        const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
-        const match = arr.find((x) => norm(x.name) === norm(GROUP_NAME));
-        if (match) {
-          siteGroupId = match.id;
-          groupDetail = `in group "${match.name}"`;
-        } else {
-          groupDetail = `group "${GROUP_NAME}" not found (${arr.map((x) => x.name).slice(0, 6).join(", ")})`;
-        }
-      } else {
-        groupDetail = `groups list failed: ${gRes.status}`;
-      }
-    } catch (e) {
-      groupDetail = `groups error: ${e.message}`;
-    }
-
     // 2. Create it. Ask for an ACTIVE site (is_active=0 creates a "delayed" site
-    // that may not show up in the account) and put it in the target group.
-    const createPayload = { url: run.siteUrl, title: run.projectName, is_active: 1 };
-    if (siteGroupId != null) createPayload.site_group_id = Number(siteGroupId);
+    // that may not show up in the account). No group — Denis's groups are locked
+    // sub-account folders and can't take API-created sites, so leave it ungrouped.
     const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
       method: "POST",
       headers,
-      body: JSON.stringify(createPayload)
+      body: JSON.stringify({ url: run.siteUrl, title: run.projectName, is_active: 1 })
     });
     const body = (await createRes.text().catch(() => "")).slice(0, 240);
     if (!createRes.ok) {
@@ -255,7 +228,7 @@ export async function setupSERanking(run, apiKey) {
       success: true,
       seRankingProjectId: String(id),
       seRankingBacklinksReportId: String(id),
-      detail: `Created SE Ranking project (site_id ${id})${groupDetail ? ` ${groupDetail}` : ""}, ${engineDetail}, ${keywordDetail}, verified.`
+      detail: `Created SE Ranking project (site_id ${id}), ${engineDetail}, ${keywordDetail}, verified.`
     };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
