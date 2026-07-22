@@ -55,7 +55,15 @@ async function snapshot(page) {
         .map((b) => clip(b.textContent, 20))
         .filter(Boolean)
         .slice(0, 12);
-      return JSON.stringify({ url: location.href.slice(0, 80), heading, inputs, buttons });
+      // Error / captcha signals: alert-ish text and any reCAPTCHA iframe.
+      const errText = [...document.querySelectorAll('[role="alert"], .error, [class*="error" i], [class*="invalid" i], .notification, .toast')]
+        .map((el) => clip(el.textContent, 60))
+        .filter(Boolean)
+        .slice(0, 4);
+      const captchaFrames = [...document.querySelectorAll("iframe")]
+        .filter((f) => /recaptcha|captcha|hcaptcha/i.test(f.src || ""))
+        .map((f) => (f.getBoundingClientRect().width > 0 ? "visible-captcha" : "hidden-captcha"));
+      return JSON.stringify({ url: location.href.slice(0, 80), heading, inputs, buttons, errors: errText, captcha: captchaFrames });
     })
     .catch(() => "");
 }
