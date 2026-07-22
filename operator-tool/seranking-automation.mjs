@@ -109,8 +109,12 @@ export async function setupSERanking(run, apiKey) {
       groupDetail = `groups error: ${e.message}`;
     }
 
-    // 2. Create it. ACTIVE + in the target group.
-    const createPayload = { url: run.siteUrl, title: run.projectName, is_active: 1 };
+    // 2. Create it. ACTIVE + subdomain_match:1 (the wizard's recommended
+    // "*.domain/*" domain type -> match_mode "subdomain"). This is what makes it
+    // a visible dashboard project: API-created sites default to match_mode
+    // "domain", which does NOT surface in the dashboard, while subdomain/path
+    // projects do (proven by comparing a manually-created visible project).
+    const createPayload = { url: run.siteUrl, title: run.projectName, is_active: 1, subdomain_match: 1 };
     if (siteGroupId != null) createPayload.site_group_id = Number(siteGroupId);
     const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
       method: "POST",
