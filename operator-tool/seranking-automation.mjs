@@ -115,13 +115,17 @@ export async function setupSERanking(run, apiKey) {
         const list = await seRes.json().catch(() => []);
         const engine = pickGoogleEngine(Array.isArray(list) ? list : list?.search_engines || [], run.market);
         if (engine) {
-          const payload = { site_id: Number(id), search_engine_id: Number(engine.id) };
-          if (engine.regionid) payload.region_id = Number(engine.regionid);
-          const addRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites/search-engines`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload)
-          });
+          // site_id goes in the QUERY STRING (not the body) per the API — sending
+          // it in the body made the endpoint reject with a bogus "Project name"
+          // 400. Body carries the engine + a country-level region (0).
+          const addRes = await fetch(
+            `${SE_RANKING_API_BASE}/project-management/sites/search-engines?site_id=${Number(id)}`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ search_engine_id: Number(engine.id), region_id: 0 })
+            }
+          );
           if (addRes.ok) {
             engineAdded = true;
             engineDetail = `added engine "${engine.name}" (id ${engine.id})`;
