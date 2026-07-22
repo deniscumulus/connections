@@ -27,32 +27,36 @@ export async function setupSERanking(run, apiKey) {
     const headers = { authorization: `Token ${apiKey}`, "content-type": "application/json" };
     const targetHost = normalizeHost(run.hostname || run.siteUrl);
 
-    // 1. Reuse an existing project for this domain. The sites list is paginated,
-    // so page through it rather than checking only the first page.
-    for (let page = 0; page < 12; page += 1) {
-      const res = await fetch(
-        `${SE_RANKING_API_BASE}/project-management/sites?limit=200&offset=${page * 200}`,
-        { headers }
-      );
-      if (!res.ok) break;
+    // Fetch the whole sites list in one call (limit=1000 covers the account)
+    // so we can both reuse and later verify without pagination guesswork.
+    async function listSites() {
+      const res = await fetch(`${SE_RANKING_API_BASE}/project-management/sites?limit=1000`, { headers });
+      if (!res.ok) return [];
       const data = await res.json().catch(() => null);
-      const arr = Array.isArray(data) ? data : Array.isArray(data?.sites) ? data.sites : [];
-      if (!arr.length) break;
-      const match = arr.find((s) => siteHost(s) === targetHost);
-      if (match) {
-        const id = match.id || match.site_id;
-        return { success: true, seRankingProjectId: String(id), seRankingBacklinksReportId: String(id) };
-      }
-      if (arr.length < 200) break; // last page reached
+      return Array.isArray(data) ? data : Array.isArray(data?.sites) ? data.sites : [];
     }
 
-    // 2. Create it. Trust the id SE Ranking returns (per their API docs).
+    // 1. Reuse an existing project for this domain.
+    const before = await listSites();
+    const existing = before.find((s) => siteHost(s) === targetHost);
+    if (existing) {
+      const id = String(existing.id || existing.site_id);
+      return {
+        success: true,
+        seRankingProjectId: id,
+        seRankingBacklinksReportId: id,
+        detail: `Reused existing SE Ranking project (site_id ${id}).`
+      };
+    }
+
+    // 2. Create it. Ask for an ACTIVE site (is_active=0 creates a "delayed" site
+    // that may not show up in the account).
     const createRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ url: run.siteUrl, title: run.projectName })
+      body: JSON.stringify({ url: run.siteUrl, title: run.projectName, is_active: 1 })
     });
-    const body = (await createRes.text().catch(() => "")).slice(0, 220);
+    const body = (await createRes.text().catch(() => "")).slice(0, 240);
     if (!createRes.ok) {
       return { success: false, needsOperator: true, error: `SE Ranking create failed: ${createRes.status} ${body}`.trim() };
     }
@@ -68,7 +72,32 @@ export async function setupSERanking(run, apiKey) {
       return { success: false, needsOperator: true, error: `SE Ranking create returned no site_id. Response: ${body}` };
     }
 
-    return { success: true, seRankingProjectId: String(id), seRankingBacklinksReportId: String(id) };
+    // 3. Verify the project actually appears in the account. A returned site_id
+    // is not proof — re-list and confirm by host or id. If it's missing, stop
+    // honestly instead of passing a phantom id downstream to Yamix.
+    let verified = false;
+    for (let i = 0; i < 3 && !verified; i += 1) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const after = await listSites();
+      verified = after.some(
+        (s) => siteHost(s) === targetHost || String(s.id || s.site_id) === String(id)
+      );
+    }
+
+    if (!verified) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: `SE Ranking returned site_id ${id} but the project for ${targetHost} does not appear in your SE Ranking sites list — it likely was not really created. Create-response: ${body}`
+      };
+    }
+
+    return {
+      success: true,
+      seRankingProjectId: String(id),
+      seRankingBacklinksReportId: String(id),
+      detail: `Created SE Ranking project (site_id ${id}) and verified it in the account.`
+    };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
   }

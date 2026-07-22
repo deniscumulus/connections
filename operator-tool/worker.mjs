@@ -257,7 +257,7 @@ async function handleStepAutomation(run, stepKey) {
     console.log(`[worker] SE Ranking succeeded for run ${run.id}`);
     return {
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: `SE Ranking project: ${result.seRankingProjectId}` }
+        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: result.detail || `SE Ranking project: ${result.seRankingProjectId}` }
       },
       captured: {
         ...(run.captured || {}),
