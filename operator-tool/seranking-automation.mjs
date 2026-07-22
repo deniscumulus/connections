@@ -16,6 +16,38 @@ function siteHost(s) {
   return normalizeHost(s?.name || s?.domain || s?.url || s?.site);
 }
 
+// Market code -> country keywords as they appear in SE Ranking engine names
+// (e.g. "Google United Kingdom", "Google USA"). Multiple keywords give a
+// fallback if SE Ranking's label differs slightly.
+const MARKET_ENGINE_COUNTRY = {
+  GB: ["united kingdom", "uk"],
+  US: ["usa", "united states"],
+  CA: ["canada"],
+  AU: ["australia"],
+  NZ: ["new zealand"],
+  IE: ["ireland"],
+  DE: ["germany"],
+  BR: ["brazil", "brasil"],
+  NL: ["netherlands"],
+  FI: ["finland"],
+  FR: ["france"],
+  DK: ["denmark"],
+  ES: ["spain"],
+  SV: ["sweden"],
+  CL: ["chile"]
+};
+
+// Pick the Google search engine matching the run's market from the account's
+// engine list (each is { id, name, regionid }).
+function pickGoogleEngine(engines, market) {
+  const google = engines.filter((e) => /google/i.test(e?.name || ""));
+  for (const keyword of MARKET_ENGINE_COUNTRY[market] || []) {
+    const match = google.find((e) => (e.name || "").toLowerCase().includes(keyword));
+    if (match) return match;
+  }
+  return null;
+}
+
 // Creates (or reuses) the SE Ranking project for the run's domain and returns its
 // site_id (also used for the Backlinks Report ID — same key).
 export async function setupSERanking(run, apiKey) {
@@ -72,7 +104,35 @@ export async function setupSERanking(run, apiKey) {
       return { success: false, needsOperator: true, error: `SE Ranking create returned no site_id. Response: ${body}` };
     }
 
-    // 3. Verify the project actually appears in the account. A returned site_id
+    // 3. Add a Google search engine for the market. A bare url+title site does
+    // not surface in the Projects UI; adding an engine makes it a real tracked
+    // project. Best-effort — don't fail the run if the engine step fails.
+    let engineDetail = "no search engine added";
+    try {
+      const seRes = await fetch(`${SE_RANKING_API_BASE}/project-management/system/search-engines`, { headers });
+      if (seRes.ok) {
+        const list = await seRes.json().catch(() => []);
+        const engine = pickGoogleEngine(Array.isArray(list) ? list : list?.search_engines || [], run.market);
+        if (engine) {
+          const addRes = await fetch(`${SE_RANKING_API_BASE}/project-management/sites/search-engines`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ site_id: Number(id), search_engine_id: Number(engine.id) })
+          });
+          engineDetail = addRes.ok
+            ? `added engine "${engine.name}"`
+            : `engine add failed: ${addRes.status} ${(await addRes.text().catch(() => "")).slice(0, 140)}`;
+        } else {
+          engineDetail = `no Google engine matched market "${run.market}"`;
+        }
+      } else {
+        engineDetail = `engine list failed: ${seRes.status}`;
+      }
+    } catch (e) {
+      engineDetail = `engine error: ${e.message}`;
+    }
+
+    // 4. Verify the project actually appears in the account. A returned site_id
     // is not proof — re-list and confirm by host or id. If it's missing, stop
     // honestly instead of passing a phantom id downstream to Yamix.
     let verified = false;
@@ -96,7 +156,7 @@ export async function setupSERanking(run, apiKey) {
       success: true,
       seRankingProjectId: String(id),
       seRankingBacklinksReportId: String(id),
-      detail: `Created SE Ranking project (site_id ${id}) and verified it in the account.`
+      detail: `Created SE Ranking project (site_id ${id}), ${engineDetail}, verified in the account.`
     };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
