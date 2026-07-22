@@ -228,6 +228,22 @@ export async function setupSERanking(run, apiKey) {
       }
     }
 
+    // 3c. Trigger a position recheck to kick off the project's first data check.
+    // API-created projects seem to stay hidden from the dashboard until their
+    // first check runs; this forces it (can't be clicked in the UI since the
+    // project isn't visible there yet).
+    let recheckDetail = "";
+    try {
+      const rRes = await fetch(
+        `${SE_RANKING_API_BASE}/project-management/sites/positions/recheck?site_id=${Number(id)}`,
+        { method: "POST", headers, body: JSON.stringify({}) }
+      );
+      const rBody = (await rRes.text().catch(() => "")).slice(0, 140);
+      recheckDetail = rRes.ok ? "recheck triggered" : `recheck failed: ${rRes.status} ${rBody}`;
+    } catch (e) {
+      recheckDetail = `recheck error: ${e.message}`;
+    }
+
     // 4. Verify the project actually appears in the account. A returned site_id
     // is not proof — re-list and confirm by host or id. If it's missing, stop
     // honestly instead of passing a phantom id downstream to Yamix.
@@ -267,7 +283,7 @@ export async function setupSERanking(run, apiKey) {
       success: true,
       seRankingProjectId: String(id),
       seRankingBacklinksReportId: String(id),
-      detail: `Created SE Ranking project (site_id ${id}), ${groupNote}, ${engineDetail}, ${keywordDetail}, verified.`
+      detail: `Created SE Ranking project (site_id ${id}), ${groupNote}, ${engineDetail}, ${keywordDetail}, ${recheckDetail}, verified.`
     };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
