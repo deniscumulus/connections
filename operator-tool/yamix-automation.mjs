@@ -69,6 +69,20 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
   }
   await page.waitForTimeout(700);
 
+  // Some option lists load asynchronously (the Parent project groups render
+  // "Loading..." until they arrive). Wait for that to finish so the real
+  // options — including the one we want — are actually present.
+  for (let i = 0; i < 30; i += 1) {
+    const stillLoading = await page
+      .getByText(/loading/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+    const optionCount = await page.getByRole("option").count().catch(() => 0);
+    if (!stillLoading && optionCount > 0) break;
+    await page.waitForTimeout(500);
+  }
+
   // Some dropdowns (e.g. Parent project) have a search box inside — type to
   // filter. Prefer the react-select input (id `react-select-*-input`) which is
   // the real editable control; fall back to a visible search placeholder. Type
@@ -230,6 +244,20 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       .getByPlaceholder("Enter main project URL")
       .first()
       .waitFor({ state: "visible", timeout: 30000 });
+
+    // Let the form's async data settle (the Parent project groups load lazily
+    // and show "Loading..."; acting before they arrive leaves Parent empty and
+    // can block the save). Wait for that indicator to clear.
+    await page.waitForLoadState("networkidle").catch(() => {});
+    for (let i = 0; i < 24; i += 1) {
+      const loading = await page
+        .getByText(/loading\.\.\./i)
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (!loading) break;
+      await page.waitForTimeout(500);
+    }
 
     // 3. Fill the Basic Information fields (placeholders from the real form).
     await fillByPlaceholder(page, "Enter main project URL", run.siteUrl);
