@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { setupGA4 } from "./ga4-automation.mjs";
 import { setupGSC } from "./gsc-automation.mjs";
 import { setupSERanking } from "./seranking-automation.mjs";
+import { setupSERankingBrowser } from "./seranking-browser.mjs";
 import { setupManageWPHFCM } from "./managewp-automation.mjs";
 import { setupYamixUpdate } from "./yamix-automation.mjs";
 
@@ -242,7 +243,13 @@ async function handleStepAutomation(run, stepKey) {
 
   if (stepKey === "seRanking") {
     console.log(`[worker] attempting SE Ranking automation for run ${run.id}`);
-    const result = await setupSERanking(run, credentials.seRankingApiKey);
+    // Plan B: create via the dashboard wizard (browser) so the project is
+    // actually visible/active in the dashboard — the public API creates sites
+    // that never surface on this account. Falls back to the API if browser
+    // login isn't configured.
+    const result = credentials.seRankingEmail && credentials.seRankingPassword
+      ? await setupSERankingBrowser(run, credentials.seRankingEmail, credentials.seRankingPassword)
+      : await setupSERanking(run, credentials.seRankingApiKey);
 
     if (result.needsOperator || !result.success) {
       return {
