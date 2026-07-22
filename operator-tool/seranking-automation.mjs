@@ -229,17 +229,35 @@ export async function setupSERanking(run, apiKey) {
     }
 
     // 3c. Trigger a position recheck to kick off the project's first data check.
-    // API-created projects seem to stay hidden from the dashboard until their
-    // first check runs; this forces it (can't be clicked in the UI since the
-    // project isn't visible there yet).
+    // API-created projects stay hidden from the dashboard until their keywords
+    // are first checked (they come in with first_check_date null). The recheck
+    // body needs each keyword's id + its site_engine_ids, so fetch the keywords
+    // first and build the list. Proven working (returns {"total":N}).
     let recheckDetail = "";
     try {
-      const rRes = await fetch(
-        `${SE_RANKING_API_BASE}/project-management/sites/positions/recheck?site_id=${Number(id)}`,
-        { method: "POST", headers, body: JSON.stringify({}) }
-      );
-      const rBody = (await rRes.text().catch(() => "")).slice(0, 140);
-      recheckDetail = rRes.ok ? "recheck triggered" : `recheck failed: ${rRes.status} ${rBody}`;
+      const kwListRes = await fetch(`${SE_RANKING_API_BASE}/project-management/keywords?site_id=${Number(id)}`, { headers });
+      if (kwListRes.ok) {
+        const kwList = await kwListRes.json().catch(() => []);
+        const arr = Array.isArray(kwList) ? kwList : kwList?.keywords || [];
+        const recheckBody = [];
+        for (const kw of arr) {
+          for (const seid of kw.site_engine_ids || []) {
+            recheckBody.push({ site_engine_id: Number(seid), keyword_id: Number(kw.id) });
+          }
+        }
+        if (recheckBody.length) {
+          const rRes = await fetch(
+            `${SE_RANKING_API_BASE}/project-management/sites/positions/recheck?site_id=${Number(id)}`,
+            { method: "POST", headers, body: JSON.stringify(recheckBody) }
+          );
+          const rBody = (await rRes.text().catch(() => "")).slice(0, 120);
+          recheckDetail = rRes.ok ? `recheck triggered ${rBody}` : `recheck failed: ${rRes.status} ${rBody}`;
+        } else {
+          recheckDetail = "no keywords to recheck";
+        }
+      } else {
+        recheckDetail = `keyword list failed: ${kwListRes.status}`;
+      }
     } catch (e) {
       recheckDetail = `recheck error: ${e.message}`;
     }
