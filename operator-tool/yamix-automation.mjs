@@ -87,7 +87,7 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
     // react-select highlights the first filtered match; Enter selects it.
     await searchBox.press("Enter").catch(() => {});
     await page.waitForTimeout(500);
-    if (!(await stillPlaceholder())) return;
+    if (!(await stillPlaceholder())) return null;
   }
 
   const candidates = [
@@ -106,7 +106,7 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
       continue;
     }
     // Only treat it as done if the trigger no longer shows the placeholder.
-    if (!(await stillPlaceholder())) return;
+    if (!(await stillPlaceholder())) return null;
   }
 
   // Last resort for a searchable dropdown: ArrowDown to highlight, then Enter.
@@ -115,19 +115,23 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
     await page.waitForTimeout(200);
     await searchBox.press("Enter").catch(() => {});
     await page.waitForTimeout(500);
-    if (!(await stillPlaceholder())) return;
+    if (!(await stillPlaceholder())) return null;
   }
 
   // Diagnostic: what options (if any) were actually visible?
   const seen = await page.getByRole("option").allInnerTexts().catch(() => []);
   await page.keyboard.press("Escape").catch(() => {});
+  const sample = seen.slice(0, 10).join(", ");
+  const diag = seen.length
+    ? `options seen: ${sample}${seen.length > 10 ? "…" : ""}`
+    : searched
+      ? "typed into search but no options rendered"
+      : "no search box and no options appeared";
   if (required) {
-    const sample = seen.slice(0, 10).join(", ");
-    throw new Error(
-      `Could not select "${optionText}" in "${triggerText}"` +
-        (seen.length ? ` (options seen: ${sample}${seen.length > 10 ? "…" : ""})` : " (dropdown did not open — no options appeared)")
-    );
+    throw new Error(`Could not select "${optionText}" in "${triggerText}" (${diag})`);
   }
+  // Optional dropdown (e.g. Parent): return the reason instead of failing.
+  return `"${optionText}" not selected — ${diag}`;
 }
 
 // Creates a new Yamix project and fills it with the run's derived dataset names,
@@ -240,10 +244,14 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       ],
       run.projectName
     );
-    // Parent project is optional (no red *), so don't fail the run if it's missing.
-    await selectDropdown(page, "Select parent project", run.defaults?.yamixParentProject || "SKY Rocket", {
-      required: false
-    });
+    // Parent project is optional (no red *), so don't fail the run if it's
+    // missing — but record the reason so we can see why it didn't select.
+    const parentDiag = await selectDropdown(
+      page,
+      "Select parent project",
+      run.defaults?.yamixParentProject || "SKY Rocket",
+      { required: false }
+    );
     await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
     await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
     await fillByPlaceholder(page, "Enter SERanking project ID", run.captured?.seRankingProjectId);
@@ -387,7 +395,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       return {
         success: true,
         yamixUpdated: created,
-        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.`
+        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.${parentDiag ? ` Parent: ${parentDiag}` : " Parent: SKY Rocket selected."}`
       };
     }
 
