@@ -109,6 +109,7 @@ export async function setupSERanking(run, apiKey) {
     // project. If this fails, we stop with the reason (below) so it's visible.
     let engineDetail = "no search engine added";
     let engineAdded = false;
+    let siteEngineId = null;
     try {
       const seRes = await fetch(`${SE_RANKING_API_BASE}/project-management/system/search-engines`, { headers });
       if (seRes.ok) {
@@ -126,11 +127,20 @@ export async function setupSERanking(run, apiKey) {
               body: JSON.stringify({ search_engine_id: Number(engine.id), region_id: 0 })
             }
           );
+          const addBody = await addRes.text().catch(() => "");
           if (addRes.ok) {
             engineAdded = true;
-            engineDetail = `added engine "${engine.name}" (id ${engine.id})`;
+            // The response returns site_engine_id — the project-local engine id
+            // needed to attach keywords to this engine.
+            try {
+              const parsed = JSON.parse(addBody);
+              siteEngineId = parsed.site_engine_id || parsed.id || null;
+            } catch {
+              /* leave null */
+            }
+            engineDetail = `added engine "${engine.name}"`;
           } else {
-            engineDetail = `engine add failed: ${addRes.status} ${(await addRes.text().catch(() => "")).slice(0, 160)}`;
+            engineDetail = `engine add failed: ${addRes.status} ${addBody.slice(0, 160)}`;
           }
         } else {
           engineDetail = `no Google engine matched market "${run.market}"`;
@@ -150,23 +160,56 @@ export async function setupSERanking(run, apiKey) {
       };
     }
 
+    // 3b. Add keywords so the site becomes a real, visible tracked project
+    // (sites with keyword_count 0 don't surface in the Projects list). Keywords
+    // come from the form's branded-keywords field, or are auto-derived
+    // (run.seRankingKeywords / run.defaults.seRankingKeywords, already computed).
+    let keywordDetail = "no keywords added";
+    const rawKeywords = (run.seRankingKeywords && run.seRankingKeywords.length
+      ? run.seRankingKeywords
+      : run.defaults?.seRankingKeywords) || [];
+    const keywords = (Array.isArray(rawKeywords) ? rawKeywords : [])
+      .map((k) => String(k).trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    if (keywords.length) {
+      try {
+        const kwBody = keywords.map((keyword) =>
+          siteEngineId ? { keyword, site_engine_ids: [Number(siteEngineId)] } : { keyword }
+        );
+        const kwRes = await fetch(`${SE_RANKING_API_BASE}/project-management/keywords?site_id=${Number(id)}`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(kwBody)
+        });
+        keywordDetail = kwRes.ok
+          ? `added ${keywords.length} keywords`
+          : `keywords failed: ${kwRes.status} ${(await kwRes.text().catch(() => "")).slice(0, 140)}`;
+      } catch (e) {
+        keywordDetail = `keywords error: ${e.message}`;
+      }
+    }
+
     // 4. Verify the project actually appears in the account. A returned site_id
     // is not proof — re-list and confirm by host or id. If it's missing, stop
     // honestly instead of passing a phantom id downstream to Yamix.
     let verified = false;
+    let after = [];
     for (let i = 0; i < 3 && !verified; i += 1) {
       await new Promise((r) => setTimeout(r, 1500));
-      const after = await listSites();
+      after = await listSites();
       verified = after.some(
         (s) => siteHost(s) === targetHost || String(s.id || s.site_id) === String(id)
       );
     }
+    const sampleHosts = after.slice(0, 4).map(siteHost).filter(Boolean).join(", ");
+    const accountInfo = `API account sees ${after.length} sites (e.g. ${sampleHosts})`;
 
     if (!verified) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking returned site_id ${id} but the project for ${targetHost} does not appear in your SE Ranking sites list — it likely was not really created. Create-response: ${body}`
+        error: `SE Ranking returned site_id ${id} but the project for ${targetHost} does not appear in your SE Ranking sites list — it likely was not really created. ${accountInfo}. Create-response: ${body}`
       };
     }
 
@@ -174,7 +217,7 @@ export async function setupSERanking(run, apiKey) {
       success: true,
       seRankingProjectId: String(id),
       seRankingBacklinksReportId: String(id),
-      detail: `Created SE Ranking project (site_id ${id}), ${engineDetail}, verified in the account.`
+      detail: `Created SE Ranking project (site_id ${id}), ${engineDetail}, ${keywordDetail}, verified.`
     };
   } catch (error) {
     return { success: false, error: `SE Ranking API error: ${error.message}` };
