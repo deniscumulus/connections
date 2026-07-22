@@ -175,6 +175,18 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     const context = await browser.newContext();
     page = await context.newPage();
 
+    // Record failed network responses so we can see if a data fetch (e.g. the
+    // Parent project groups) is erroring in the automation session.
+    const failedRequests = [];
+    page.on("response", (resp) => {
+      try {
+        if (resp.status() >= 400) failedRequests.push(`${resp.status()} ${resp.url().replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
+      } catch {
+        /* ignore */
+      }
+    });
+    page._failedRequests = failedRequests;
+
     // 1. Login at the canonical sign-in page. Wait for the form to render before
     // filling (going to the root races a redirect to /auth/sign-in). Confirmed DOM:
     // input[type=email] (placeholder "example@gmail.com"), input[type=password],
@@ -292,6 +304,16 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     await selectDropdown(page, "Select Language", run.language);
     await fillByPlaceholder(page, "Enter regex pattern", run.defaults?.yamixRegexPattern || "");
 
+    // Close any open dropdown and let a still-loading Parent settle — a Parent
+    // combo stuck on "Loading..." blocks the submit. Wait for it to clear.
+    await page.keyboard.press("Escape").catch(() => {});
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 40; i += 1) {
+      const loading = await page.getByText(/loading\.\.\./i).first().isVisible().catch(() => false);
+      if (!loading) break;
+      await page.waitForTimeout(500);
+    }
+
     // 4. Save. The submit button may read "Save changes" or "Create project".
     const saveBtn = page
       .getByRole("button", { name: /save changes|create project|^create$|^save$|submit/i })
@@ -359,6 +381,8 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
           return JSON.stringify({ invalid, buttons, combos, inputs }).slice(0, 700);
         })
         .catch((e) => `diag-error: ${e.message}`);
+      const failed = (page._failedRequests || []).slice(-6);
+      if (failed.length) blockDiag += ` failedRequests: ${failed.join(" ; ")}`;
     }
     const lastUrl = page.url();
 
