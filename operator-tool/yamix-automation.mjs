@@ -310,22 +310,40 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     const lastUrl = page.url();
 
     // 5. Ground-truth verification: does the project now appear in the list?
-    // Retry a few times in case Yamix commits the row a moment later.
+    // The save can succeed without navigating or toasting, so this list check
+    // is the real success signal — it must be robust. Give the create API time
+    // to commit, use a resilient search-input locator, and read the table text
+    // (input values aren't in innerText, so a matched name means a real row).
+    const host = (run.hostname || run.siteUrl || "")
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/.*$/, "")
+      .toLowerCase();
     let created = false;
     try {
+      await page.waitForTimeout(2500);
       await page.goto("https://yamix.com/settings/projects");
-      await page.waitForLoadState().catch(() => {});
-      const search = page.getByPlaceholder("Search", { exact: false }).first();
-      if (await search.count().catch(() => 0)) {
-        await search.fill(run.projectName).catch(() => {});
-      }
-      for (let i = 0; i < 4 && !created; i += 1) {
-        await page.waitForTimeout(1200);
-        created = await page
-          .getByText(run.projectName, { exact: false })
-          .first()
-          .isVisible()
-          .catch(() => false);
+      await page.waitForLoadState("networkidle").catch(() => {});
+      const searchBox = page
+        .locator('input[type="search"], input[placeholder*="search" i], [role="searchbox"], input[name*="search" i]')
+        .first();
+      const hasSearch = (await searchBox.count().catch(() => 0)) > 0;
+      const needle = run.projectName.toLowerCase();
+      for (const term of [run.projectName, host]) {
+        if (created || !term) break;
+        if (hasSearch) {
+          await searchBox.fill("").catch(() => {});
+          await searchBox.fill(term).catch(() => {});
+        }
+        for (let i = 0; i < 3 && !created; i += 1) {
+          await page.waitForTimeout(1200);
+          const listText = await page
+            .locator("table, main")
+            .first()
+            .innerText()
+            .catch(() => "");
+          created = listText.toLowerCase().includes(needle) || listText.toLowerCase().includes(host);
+        }
       }
     } catch {
       /* fall through to failure handling */
