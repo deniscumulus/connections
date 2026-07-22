@@ -2,7 +2,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { setupGA4 } from "./ga4-automation.mjs";
 import { setupGSC } from "./gsc-automation.mjs";
 import { setupSERanking } from "./seranking-automation.mjs";
-import { setupSERankingBrowser } from "./seranking-browser.mjs";
 import { setupManageWPHFCM } from "./managewp-automation.mjs";
 import { setupYamixUpdate } from "./yamix-automation.mjs";
 
@@ -246,10 +245,19 @@ async function handleStepAutomation(run, stepKey) {
     // Plan B: create via the dashboard wizard (browser) so the project is
     // actually visible/active in the dashboard — the public API creates sites
     // that never surface on this account. Falls back to the API if browser
-    // login isn't configured.
-    const result = credentials.seRankingEmail && credentials.seRankingPassword
-      ? await setupSERankingBrowser(run, credentials.seRankingEmail, credentials.seRankingPassword)
-      : await setupSERanking(run, credentials.seRankingApiKey);
+    // login isn't configured. The browser module is imported dynamically here so
+    // any problem with it can't crash the worker on startup (stalling the queue).
+    let result;
+    if (credentials.seRankingEmail && credentials.seRankingPassword) {
+      try {
+        const { setupSERankingBrowser } = await import("./seranking-browser.mjs");
+        result = await setupSERankingBrowser(run, credentials.seRankingEmail, credentials.seRankingPassword);
+      } catch (e) {
+        result = { success: false, needsOperator: true, error: `SE Ranking browser module failed to load/run: ${e.message}` };
+      }
+    } else {
+      result = await setupSERanking(run, credentials.seRankingApiKey);
+    }
 
     if (result.needsOperator || !result.success) {
       return {
