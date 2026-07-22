@@ -12,30 +12,21 @@ const ACCESS_CODE = "operatorcumuluseo";
 // Order must match STEP_ORDER in worker.mjs. GA4 + GSC are set up manually before
 // the run (operator provides the GA4 property number). The tool does SE Ranking,
 // then creates the Yamix project. Yamix runs last.
+// The two real automation steps the operator cares about. "inputs" (the form)
+// and "finalCheck" (the summary write) are not shown as progress steps — the
+// user only wants to see what the tool has finished and what it is doing now.
 const stepMeta = [
   {
-    key: "inputs",
-    title: "Inputs",
-    text: "Run created from the intake form. GA4 and GSC are set up manually beforehand; the domain, GA4 property number, market and language are entered on the form.",
-    links: []
-  },
-  {
     key: "seRanking",
-    title: "SE Ranking",
-    text: "Automation creates the SE Ranking project for the domain and captures the SE Ranking Project ID and Backlinks Report ID for Yamix.",
+    title: "SE Ranking project",
+    text: "Creating the SE Ranking project for the domain and capturing the Project ID + Backlinks Report ID that Yamix needs.",
     links: [{ label: "Open SE Ranking", href: "https://online.seranking.com/login.html" }]
   },
   {
     key: "yamix",
-    title: "Yamix New Project",
-    text: "Automation creates the Yamix project and fills it with the derived GA4/GSC dataset names, the captured SE Ranking IDs, the market, language, and main project URL.",
+    title: "Yamix project",
+    text: "Creating the Yamix project and filling it with the SE Ranking IDs, the GA4/GSC dataset names, the market, language and main URL.",
     links: [{ label: "Open Yamix Projects", href: "https://yamix.com/settings/projects" }]
-  },
-  {
-    key: "finalCheck",
-    title: "Final check",
-    text: "Automation verifies the final state and writes the run summary.",
-    links: []
   }
 ];
 
@@ -244,12 +235,22 @@ function statusLabel(status) {
   }[status] || "Todo";
 }
 
+function isRunDone(run) {
+  const automation = automationFor(run);
+  if (["done", "simulated_done"].includes(automation.status)) return true;
+  // Both real steps finished (finalCheck is bookkeeping, not shown).
+  return stepMeta.every((step) => run.steps?.[step.key]?.status === "done");
+}
+
 function progressFor(run) {
-  // Count only the steps in the current flow (stepMeta), so stale keys on older
-  // runs don't skew the total (e.g. an old run still carrying GA4/GSC steps).
+  // Only the two real steps count toward progress. A finished run is always
+  // 100%, even while the trailing finalCheck bookkeeping settles.
   const keys = stepMeta.map((step) => step.key);
   const total = keys.length || 1;
   const done = keys.filter((key) => run.steps?.[key]?.status === "done").length;
+  if (isRunDone(run)) {
+    return { done: total, total, percent: 100 };
+  }
   return {
     done,
     total,
@@ -258,9 +259,15 @@ function progressFor(run) {
 }
 
 function currentStepKey(run) {
+  // Once everything is done, anchor to the last real step (Yamix).
+  if (isRunDone(run)) return stepMeta[stepMeta.length - 1].key;
   const automation = automationFor(run);
-  if (automation.currentStep) return automation.currentStep;
-  return stepMeta.find((step) => (run.steps?.[step.key]?.status || "todo") !== "done")?.key || "finalCheck";
+  // Map any non-visible step (inputs / finalCheck) to the first unfinished
+  // real step so the UI never points at a step it doesn't show.
+  if (automation.currentStep && stepMeta.some((step) => step.key === automation.currentStep)) {
+    return automation.currentStep;
+  }
+  return stepMeta.find((step) => (run.steps?.[step.key]?.status || "todo") !== "done")?.key || stepMeta[0].key;
 }
 
 function currentStep(run) {
@@ -498,14 +505,22 @@ function renderAutomationStatus(run) {
   const stepStatus = currentStepStatus(run);
   const blocked = needsOperator(run);
   const link = step.links?.[0]?.href || "";
-  const status = blocked ? "needs_operator" : automation.status || stepStatus;
+  const done = isRunDone(run);
+  const status = blocked ? "needs_operator" : done ? "done" : automation.status || stepStatus;
   const note = run.steps?.[step.key]?.note || "";
 
-  els.stepCount.textContent = `Step ${currentStepNumber(run)}/${stepMeta.length}`;
-  els.currentStepTitle.textContent = step.title;
-  els.currentStepMessage.textContent = blocked
-    ? automation.message || note || "Automation needs a person to complete the current browser step."
-    : step.text || note || automation.message || "";
+  if (done) {
+    els.stepCount.textContent = `${stepMeta.length}/${stepMeta.length} done`;
+    els.currentStepTitle.textContent = "All done";
+    els.currentStepMessage.textContent =
+      "SE Ranking and Yamix projects created. The run is complete.";
+  } else {
+    els.stepCount.textContent = `Step ${currentStepNumber(run)}/${stepMeta.length}`;
+    els.currentStepTitle.textContent = step.title;
+    els.currentStepMessage.textContent = blocked
+      ? automation.message || note || "Automation needs a person to complete the current browser step."
+      : step.text || note || automation.message || "";
+  }
 
   els.statusPill.textContent = statusLabel(status);
   els.statusPill.className = `pill ${statusClass(status)}`;
