@@ -8,6 +8,7 @@ COPY worker.mjs ./
 COPY ga4-automation.mjs ./
 COPY gsc-automation.mjs ./
 COPY seranking-automation.mjs ./
+COPY seranking-browser.mjs ./
 COPY managewp-automation.mjs ./
 COPY yamix-automation.mjs ./
 COPY public ./public
