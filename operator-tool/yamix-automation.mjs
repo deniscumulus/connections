@@ -269,6 +269,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // fall back to keyword-matched lines from the form text.
     const stillOnForm = /\/settings\/create-project/i.test(page.url());
     let inlineErr = "";
+    let blockDiag = "";
     if (stillOnForm) {
       const alertText = await page
         .locator('[role="alert"], .text-destructive, [class*="destructive"], [aria-invalid="true"] ~ p, p[id$="-message"]')
@@ -285,6 +286,34 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
           .join("; ")
           .slice(0, 240);
       }
+
+      // Structural diagnostic: which fields are marked invalid, and is the
+      // submit button disabled? This pinpoints a silent client-side block even
+      // when no visible error text is rendered.
+      blockDiag = await page
+        .evaluate(() => {
+          const labelFor = (el) => {
+            const item = el.closest("div,section,fieldset");
+            const lbl = item && item.querySelector("label");
+            return (
+              (lbl && lbl.textContent.trim()) ||
+              el.getAttribute("name") ||
+              el.getAttribute("placeholder") ||
+              el.getAttribute("aria-label") ||
+              el.id ||
+              "field"
+            ).slice(0, 40);
+          };
+          const invalid = [...document.querySelectorAll('[aria-invalid="true"]')].map(labelFor);
+          const btn = [...document.querySelectorAll("button")].find((b) =>
+            /save|create|submit/i.test(b.textContent || "")
+          );
+          const parts = [];
+          if (invalid.length) parts.push(`invalid fields: ${[...new Set(invalid)].join(", ")}`);
+          if (btn) parts.push(`save button ${btn.disabled ? "DISABLED" : "enabled"}`);
+          return parts.join(" | ");
+        })
+        .catch(() => "");
     }
     const lastUrl = page.url();
 
@@ -342,8 +371,8 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       success: false,
       needsOperator: true,
       error: inlineErr
-        ? `Yamix did not save "${run.projectName}" — form validation: ${inlineErr}`
-        : `Yamix save outcome unclear for "${run.projectName}" — still on ${lastUrl}, no toast, no field error, not found in the list. The Save click may have been silently blocked.`
+        ? `Yamix did not save "${run.projectName}" — form validation: ${inlineErr}${blockDiag ? ` [${blockDiag}]` : ""}`
+        : `Yamix save outcome unclear for "${run.projectName}" — still on create form, no toast, no field error, not found in the list.${blockDiag ? ` Diagnostic: ${blockDiag}.` : " The Save click may have been silently blocked."}`
     };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
