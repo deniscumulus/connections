@@ -287,33 +287,25 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
           .slice(0, 240);
       }
 
-      // Structural diagnostic: which fields are marked invalid, and is the
-      // submit button disabled? This pinpoints a silent client-side block even
-      // when no visible error text is rendered.
+      // Full form snapshot: input values, dropdown (combobox) texts, invalid
+      // fields, and submit-button state. One blocked run then shows exactly
+      // which field is empty or unselected.
       blockDiag = await page
         .evaluate(() => {
-          const labelFor = (el) => {
-            const item = el.closest("div,section,fieldset");
-            const lbl = item && item.querySelector("label");
-            return (
-              (lbl && lbl.textContent.trim()) ||
-              el.getAttribute("name") ||
-              el.getAttribute("placeholder") ||
-              el.getAttribute("aria-label") ||
-              el.id ||
-              "field"
-            ).slice(0, 40);
-          };
-          const invalid = [...document.querySelectorAll('[aria-invalid="true"]')].map(labelFor);
-          const btn = [...document.querySelectorAll("button")].find((b) =>
-            /save|create|submit/i.test(b.textContent || "")
-          );
-          const parts = [];
-          if (invalid.length) parts.push(`invalid fields: ${[...new Set(invalid)].join(", ")}`);
-          if (btn) parts.push(`save button ${btn.disabled ? "DISABLED" : "enabled"}`);
-          return parts.join(" | ");
+          const clip = (s, n) => (s || "").replace(/\s+/g, " ").trim().slice(0, n);
+          const inputs = [...document.querySelectorAll("input, textarea")]
+            .filter((el) => el.type !== "hidden")
+            .map((el) => `${clip(el.name || el.placeholder || el.getAttribute("aria-label") || el.id || "in", 22)}=${clip(el.value, 28) || "∅"}`);
+          const combos = [...document.querySelectorAll('[role="combobox"], [role="button"][aria-haspopup]')]
+            .map((el) => clip(el.textContent, 30) || "∅");
+          const invalid = [...document.querySelectorAll('[aria-invalid="true"]')]
+            .map((el) => clip(el.name || el.placeholder || el.id || "field", 22));
+          const buttons = [...document.querySelectorAll("button")]
+            .map((b) => `${clip(b.textContent, 18)}${b.disabled ? "(disabled)" : ""}`)
+            .filter((t) => /save|create|submit|connect/i.test(t));
+          return JSON.stringify({ invalid, buttons, combos, inputs }).slice(0, 700);
         })
-        .catch(() => "");
+        .catch((e) => `diag-error: ${e.message}`);
     }
     const lastUrl = page.url();
 
