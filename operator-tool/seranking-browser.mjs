@@ -82,9 +82,13 @@ export async function setupSERankingBrowser(run, email, password) {
     // 1. Login.
     await page.goto("https://online.seranking.com/login.html");
     await page.waitForLoadState().catch(() => {});
-    const emailField = page.locator('input[type="email"], input[name="email"], input[placeholder*="mail" i]').first();
+    // SE Ranking login fields are named altem[login] / altem[password]; match by
+    // "login"/"password" substrings to be robust. NOTE: the page also has a
+    // g-recaptcha-response field — if reCAPTCHA challenges, automated login is
+    // blocked (same wall as Google).
+    const emailField = page.locator('input[name*="login" i], input[type="email"], input[name="email"]').first();
     await emailField.waitFor({ state: "visible", timeout: 25000 }).catch(() => {});
-    const pwField = page.locator('input[type="password"]').first();
+    const pwField = page.locator('input[name*="password" i], input[type="password"]').first();
     await emailField.click().catch(() => {});
     await emailField.pressSequentially(email, { delay: 25 }).catch(() => {});
     await pwField.click().catch(() => {});
