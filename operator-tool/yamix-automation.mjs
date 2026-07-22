@@ -263,18 +263,30 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       await page.waitForTimeout(500);
     }
 
-    // If still on the create form and no useful toast, capture inline validation errors.
-    const onCreateForm = /\/settings\/create-project/i.test(page.url());
+    // If still on the create form, capture WHY. shadcn / react-hook-form render
+    // field errors as role=alert or text-destructive paragraphs that don't
+    // always contain our keywords, so read those elements directly first, then
+    // fall back to keyword-matched lines from the form text.
+    const stillOnForm = /\/settings\/create-project/i.test(page.url());
     let inlineErr = "";
-    if (onCreateForm && !saveToast) {
-      const formText = await page.locator("form").first().innerText().catch(() => "");
-      inlineErr = formText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((s) => /required|invalid|must|select|please|least|match|only|maximum|minimum|exist|taken|already|duplicate|incorrect/i.test(s))
-        .join("; ")
-        .slice(0, 220);
+    if (stillOnForm) {
+      const alertText = await page
+        .locator('[role="alert"], .text-destructive, [class*="destructive"], [aria-invalid="true"] ~ p, p[id$="-message"]')
+        .allInnerTexts()
+        .catch(() => []);
+      inlineErr = [...new Set(alertText.map((s) => s.trim()).filter(Boolean))].join("; ").slice(0, 240);
+
+      if (!inlineErr) {
+        const formText = await page.locator("form").first().innerText().catch(() => "");
+        inlineErr = formText
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((s) => /required|invalid|must|select|please|least|match|only|maximum|minimum|exist|taken|already|duplicate|incorrect/i.test(s))
+          .join("; ")
+          .slice(0, 240);
+      }
     }
+    const lastUrl = page.url();
 
     // 5. Ground-truth verification: does the project now appear in the list?
     // Retry a few times in case Yamix commits the row a moment later.
@@ -328,7 +340,10 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
 
     return {
       success: false,
-      error: `Yamix save outcome unclear for "${run.projectName}" (no toast, no error, not confirmed in the list).`
+      needsOperator: true,
+      error: inlineErr
+        ? `Yamix did not save "${run.projectName}" — form validation: ${inlineErr}`
+        : `Yamix save outcome unclear for "${run.projectName}" — still on ${lastUrl}, no toast, no field error, not found in the list. The Save click may have been silently blocked.`
     };
   } catch (error) {
     // Include where the page ended up, so failures are diagnosable (e.g. still
