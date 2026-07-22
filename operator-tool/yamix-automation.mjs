@@ -70,14 +70,17 @@ async function selectDropdown(page, triggerText, optionText, { required = true }
   await page.waitForTimeout(700);
 
   // Some option lists load asynchronously (the Parent project groups render
-  // "Loading..." until they arrive). Wait for that to finish so the real
-  // options — including the one we want — are actually present.
+  // "Loading..." until they arrive). Wait until the option we want is actually
+  // visible (the Parent groups aren't role=option, so don't rely on that), or
+  // until loading clears and role=option items exist (Market/Language).
   for (let i = 0; i < 30; i += 1) {
-    const stillLoading = await page
-      .getByText(/loading/i)
+    const targetVisible = await page
+      .getByText(optionText, { exact: true })
       .first()
       .isVisible()
       .catch(() => false);
+    if (targetVisible) break;
+    const stillLoading = await page.getByText(/loading/i).first().isVisible().catch(() => false);
     const optionCount = await page.getByRole("option").count().catch(() => 0);
     if (!stillLoading && optionCount > 0) break;
     await page.waitForTimeout(500);
