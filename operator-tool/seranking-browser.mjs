@@ -221,8 +221,11 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // The location field only exists once the picker is open (the closed state
     // is just a button), and the page has its own "Search" box, so selectors are
     // unreliable here. Open the picker and type into whatever it focuses.
-    await clickButtonByText(page, /enter country|country, ?city/i);
+    const countryClicked = await clickButtonByText(page, /enter country|country, ?city/i);
     await page.waitForTimeout(1500);
+    // Capture what the picker looks like right after opening — this is the only
+    // way to see it, since it's gone by the time the failure snapshot is taken.
+    const pickerDiag = `countryBtnClicked:${countryClicked} ` + (await snapshot(page));
     await page.keyboard.type(country, { delay: 70 });
     await page.waitForTimeout(2500);
     // Choose the matching suggestion; fall back to keyboard selection.
@@ -267,7 +270,7 @@ export async function setupSERankingBrowser(run, auth = {}) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap}`
+        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag}`
       };
     }
 
