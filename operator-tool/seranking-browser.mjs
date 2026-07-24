@@ -63,7 +63,13 @@ async function snapshot(page) {
       const captchaFrames = [...document.querySelectorAll("iframe")]
         .filter((f) => /recaptcha|captcha|hcaptcha/i.test(f.src || ""))
         .map((f) => (f.getBoundingClientRect().width > 0 ? "visible-captcha" : "hidden-captcha"));
-      return JSON.stringify({ url: location.href.slice(0, 80), heading, inputs, buttons, errors: errText, captcha: captchaFrames });
+      // Any open dropdown/listbox/dialog — tells us if a picker actually opened.
+      const popups = [...document.querySelectorAll('[role="listbox"], [role="dialog"], [role="menu"], [class*="dropdown" i], [class*="popup" i], [class*="suggest" i]')]
+        .filter((el) => el.getBoundingClientRect().width > 0)
+        .map((el) => clip(el.textContent, 50))
+        .filter(Boolean)
+        .slice(0, 3);
+      return JSON.stringify({ url: location.href.slice(0, 80), heading, inputs, buttons, errors: errText, captcha: captchaFrames, popups });
     })
     .catch(() => "");
 }
@@ -226,7 +232,17 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // Capture what the picker looks like right after opening — this is the only
     // way to see it, since it's gone by the time the failure snapshot is taken.
     const pickerDiag = `countryBtnClicked:${countryClicked} ` + (await snapshot(page));
-    await page.keyboard.type(country, { delay: 70 });
+    // Clicking the button adds no new field, so the existing "Search" box is the
+    // picker's input. Click it explicitly (keyboard.type alone went nowhere
+    // because the button click didn't move focus), then type the country.
+    const searchBox = page.getByPlaceholder("Search", { exact: true }).first();
+    if (await searchBox.count().catch(() => 0)) {
+      await searchBox.click().catch(() => {});
+      await searchBox.fill("").catch(() => {});
+      await searchBox.pressSequentially(country, { delay: 70 }).catch(() => {});
+    } else {
+      await page.keyboard.type(country, { delay: 70 });
+    }
     await page.waitForTimeout(2500);
     // Choose the matching suggestion; fall back to keyboard selection.
     const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
