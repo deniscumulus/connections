@@ -73,21 +73,78 @@ function extractSiteId(url) {
   return m ? m[1] : null;
 }
 
+// Normalize a cookie export (e.g. Cookie-Editor JSON) into Playwright's format.
+// Cookie-Editor uses expirationDate + lowercase sameSite; Playwright wants
+// expires + Strict/Lax/None, and rejects unknown fields.
+function normalizeCookies(raw) {
+  const arr = Array.isArray(raw) ? raw : raw?.cookies || [];
+  const sameSiteOf = (v) => {
+    const s = String(v || "").toLowerCase();
+    if (s.includes("none") || s === "no_restriction") return "None";
+    if (s.includes("strict")) return "Strict";
+    return "Lax";
+  };
+  return arr
+    .filter((c) => c && c.name && c.value && (c.domain || c.url))
+    .map((c) => {
+      const cookie = {
+        name: String(c.name),
+        value: String(c.value),
+        path: c.path || "/",
+        httpOnly: Boolean(c.httpOnly),
+        secure: Boolean(c.secure),
+        sameSite: sameSiteOf(c.sameSite)
+      };
+      if (c.domain) cookie.domain = String(c.domain);
+      else cookie.url = String(c.url);
+      const exp = c.expires ?? c.expirationDate;
+      if (typeof exp === "number" && exp > 0) cookie.expires = Math.floor(exp);
+      return cookie;
+    });
+}
+
 // Creates a visible SE Ranking project through the dashboard wizard.
-export async function setupSERankingBrowser(run, email, password) {
+// auth: { cookiesJson } (preferred) or { email, password }.
+export async function setupSERankingBrowser(run, auth = {}) {
+  const { cookiesJson = "", email = "", password = "" } = auth;
   let browser;
   try {
-    if (!email || !password) {
-      return { success: false, needsOperator: true, error: "SE Ranking login not configured (SERANKING_EMAIL / SERANKING_PASSWORD)." };
+    if (!cookiesJson && !(email && password)) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: "SE Ranking browser auth not configured (set SERANKING_COOKIES_B64, or SERANKING_EMAIL + password)."
+      };
     }
 
     const { chromium } = await import("playwright");
     browser = await chromium.launch();
     const context = await browser.newContext();
+
+    // Preferred: reuse Denis's logged-in SUB-ACCOUNT session (cookies). Two
+    // reasons this is the only workable path: SE Ranking's login page has a
+    // VISIBLE reCAPTCHA that blocks automated login, and projects created with
+    // the admin's API key land in the admin account and can't be moved to a
+    // sub-account (confirmed by SE Ranking support). Running as his session
+    // creates the project inside his sub-account, where he can see it.
+    let usedSession = false;
+    if (cookiesJson) {
+      try {
+        const cookies = normalizeCookies(JSON.parse(cookiesJson));
+        if (cookies.length) {
+          await context.addCookies(cookies);
+          usedSession = true;
+        }
+      } catch (e) {
+        return { success: false, needsOperator: true, error: `SE Ranking session cookies could not be parsed: ${e.message}` };
+      }
+    }
+
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
 
-    // 1. Login.
+    // 1. Login (only when no session cookies — expect reCAPTCHA to block this).
+    if (!usedSession) {
     await page.goto("https://online.seranking.com/login.html");
     await page.waitForLoadState().catch(() => {});
     // SE Ranking login fields are named altem[login] / altem[password]; match by
@@ -122,10 +179,22 @@ export async function setupSERankingBrowser(run, email, password) {
       const snap = await snapshot(page);
       return { success: false, needsOperator: true, error: `SE Ranking login did not complete. [email:${email ? "set" : "empty"}, pwLen:${(password || "").length}] ${snap}` };
     }
+    }
 
     // 2. Open the create-project wizard.
     await page.goto("https://online.seranking.com/admin.site.wizard.html#/");
     await page.waitForLoadState("networkidle").catch(() => {});
+
+    // Bounced back to the login page = the session isn't valid.
+    if (/login\.html/i.test(page.url())) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: usedSession
+          ? "SE Ranking session expired or invalid — log in manually with 'keep me logged in', re-export the cookies for online.seranking.com, and update the SERANKING_COOKIES_B64 secret."
+          : "SE Ranking login blocked (reCAPTCHA) — use session cookies instead."
+      };
+    }
     // Step 1 field.
     const urlField = page
       .locator('input[placeholder*="Website URL" i], input[placeholder*="URL" i], input[type="url"]')

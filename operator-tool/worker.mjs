@@ -31,7 +31,11 @@ const credentials = {
   yamixPassword: fromB64(process.env.YAMIX_PASSWORD_B64) || process.env.YAMIX_PASSWORD || "",
   seRankingEmail: process.env.SERANKING_EMAIL || "",
   seRankingPassword: fromB64(process.env.SERANKING_PASSWORD_B64) || process.env.SERANKING_PASSWORD || "",
-  seRankingApiKey: process.env.SERANKING_API_KEY || ""
+  seRankingApiKey: process.env.SERANKING_API_KEY || "",
+  // Logged-in sub-account session (Cookie-Editor JSON, base64). Preferred over
+  // email/password: SE Ranking's login has a visible reCAPTCHA, and only a
+  // sub-account session creates projects where Denis can actually see them.
+  seRankingCookies: fromB64(process.env.SERANKING_COOKIES_B64) || ""
 };
 
 // Manual before the run: create the Google account and connect the site to GA4 +
@@ -248,10 +252,14 @@ async function handleStepAutomation(run, stepKey) {
     // login isn't configured. The browser module is imported dynamically here so
     // any problem with it can't crash the worker on startup (stalling the queue).
     let result;
-    if (credentials.seRankingEmail && credentials.seRankingPassword) {
+    if (credentials.seRankingCookies || (credentials.seRankingEmail && credentials.seRankingPassword)) {
       try {
         const { setupSERankingBrowser } = await import("./seranking-browser.mjs");
-        result = await setupSERankingBrowser(run, credentials.seRankingEmail, credentials.seRankingPassword);
+        result = await setupSERankingBrowser(run, {
+          cookiesJson: credentials.seRankingCookies,
+          email: credentials.seRankingEmail,
+          password: credentials.seRankingPassword
+        });
       } catch (e) {
         result = { success: false, needsOperator: true, error: `SE Ranking browser module failed to load/run: ${e.message}` };
       }
