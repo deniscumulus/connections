@@ -286,10 +286,16 @@ export async function setupSERankingBrowser(run, auth = {}) {
     await page.waitForTimeout(2000);
 
     // ---- Step 1: General information ----
-    const urlField = page.getByPlaceholder(/website url|enter domain or url|url/i).first();
+    // In advanced mode the URL box is placeholdered with an example domain
+    // ("mycompany.com"), not "Website URL" — matching only on url/domain missed
+    // it and step 1 failed with "Please, fill in url!".
+    const urlField = page
+      .getByPlaceholder(/mycompany|website url|enter domain or url|domain|url/i)
+      .first();
     await urlField.waitFor({ state: "visible", timeout: 20000 }).catch(() => {});
     await urlField.click().catch(() => {});
     await urlField.fill(run.siteUrl).catch(() => {});
+    stepDiags.push(`url:${(await urlField.inputValue().catch(() => "")) ? "set" : "EMPTY"}`);
     const nameField = page.getByPlaceholder(/project name/i).first();
     if (await nameField.count().catch(() => 0)) {
       await nameField.click().catch(() => {});
