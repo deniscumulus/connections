@@ -214,21 +214,30 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // Make sure the classic Google engine is the selected one.
     await clickButtonByText(page, /^google$/i).catch(() => {});
 
-    // Location: type the market's country and pick the first suggestion.
+    // Location is a BUTTON ("Enter country, city"), not an input — clicking it
+    // opens a picker with a search box. Leaving it empty fails validation with
+    // "Enter country, city or postal code".
     const country = MARKET_COUNTRY[run.market] || "United Kingdom";
-    const locField = page.getByPlaceholder(/country|city/i).first();
-    if (await locField.count().catch(() => 0)) {
-      await locField.click().catch(() => {});
-      await locField.fill("").catch(() => {});
-      await locField.pressSequentially(country, { delay: 60 }).catch(() => {});
-      await page.waitForTimeout(1500);
-      const option = page.getByText(country, { exact: false }).last();
+    await clickButtonByText(page, /enter country|country, ?city/i);
+    await page.waitForTimeout(1200);
+    const locSearch = page
+      .locator(
+        'input[placeholder*="country" i], input[placeholder*="city" i], input[placeholder*="postal" i], input[placeholder*="search" i]'
+      )
+      .first();
+    if (await locSearch.count().catch(() => 0)) {
+      await locSearch.click().catch(() => {});
+      await locSearch.fill("").catch(() => {});
+      await locSearch.pressSequentially(country, { delay: 60 }).catch(() => {});
+      await page.waitForTimeout(2000);
+      // Pick the matching suggestion from the dropdown.
+      const option = page.getByText(new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")).last();
       if (await option.count().catch(() => 0)) {
-        await option.click({ timeout: 4000 }).catch(() => {});
+        await option.click({ timeout: 5000 }).catch(() => {});
       } else {
-        await locField.press("Enter").catch(() => {});
+        await locSearch.press("Enter").catch(() => {});
       }
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(1000);
     }
 
     // Keywords (one per line).
