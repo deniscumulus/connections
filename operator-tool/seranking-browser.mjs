@@ -49,18 +49,35 @@ async function clickButtonByText(page, re, { timeout = 8000, force = false } = {
 // single-page form (whose Location autocomplete never commits a pick) to the
 // multi-step flow, where Country is an ordinary dropdown.
 async function toggleAdvanced(page) {
-  const sw = page.getByRole("switch", { name: /advanced/i }).first();
-  if (await sw.count().catch(() => 0)) {
-    const checked = await sw.getAttribute("aria-checked").catch(() => null);
-    if (checked !== "true") await sw.click({ timeout: 5000 }).catch(() => {});
-    return "switch";
+  // The setting is REMEMBERED per user, so clicking blindly flips it the wrong
+  // way every other run (one run got the advanced wizard, the next got the quick
+  // form back). Detect the mode instead — "Next step" only exists in advanced —
+  // and click until we're actually there.
+  const isAdvanced = async () =>
+    (await page.getByRole("button", { name: /next step/i }).count().catch(() => 0)) > 0;
+
+  if (await isAdvanced()) return "already";
+
+  const clickToggle = async () => {
+    const sw = page.getByRole("switch", { name: /advanced/i }).first();
+    if (await sw.count().catch(() => 0)) {
+      await sw.click({ timeout: 5000 }).catch(() => {});
+      return true;
+    }
+    const label = page.getByText(/advanced settings/i).first();
+    if (await label.count().catch(() => 0)) {
+      await label.click({ timeout: 5000 }).catch(() => {});
+      return true;
+    }
+    return false;
+  };
+
+  for (const attempt of ["on", "on-retry"]) {
+    if (!(await clickToggle())) return "not-found";
+    await page.waitForTimeout(2000);
+    if (await isAdvanced()) return attempt;
   }
-  const label = page.getByText(/advanced settings/i).first();
-  if (await label.count().catch(() => 0)) {
-    await label.click({ timeout: 5000 }).catch(() => {});
-    return "label";
-  }
-  return "not-found";
+  return "failed";
 }
 
 // Country in advanced mode: try a native <select> first, then a custom dropdown.
