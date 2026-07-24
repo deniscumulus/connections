@@ -346,26 +346,12 @@ export async function setupSERankingBrowser(run, auth = {}) {
     const optionRows = page.locator('.ui-option[role="option"]');
     const optionTexts = page.locator(".ui-option__content");
     await optionTexts.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
-    let picked = false;
-    let pickErr = "";
-    const candidates = [
-      optionTexts.filter({ hasText: countryRe }).first(),
-      optionRows.filter({ hasText: countryRe }).first(),
-      optionTexts.first()
-    ];
-    for (const cand of candidates) {
-      if (picked) break;
-      if (!(await cand.count().catch(() => 0))) continue;
-      try {
-        await cand.click({ timeout: 6000 });
-        picked = true;
-      } catch (e) {
-        pickErr = String(e.message || "").slice(0, 60);
-      }
-    }
-    await page.waitForTimeout(1500);
-    // Did the pick actually commit? The trigger should now show the country
-    // instead of the placeholder. (Selector taken from the live DOM.)
+    // Let the list settle first: it re-renders as the per-keystroke XHRs land,
+    // and clicking mid-render landed on empty space — the dropdown closed with
+    // nothing selected (rows fell to 0 while the trigger kept its placeholder).
+    await page.waitForTimeout(2000);
+
+    // The trigger shows the chosen location once a pick commits.
     const readTrigger = () =>
       page
         .evaluate(() => {
@@ -373,12 +359,33 @@ export async function setupSERankingBrowser(run, auth = {}) {
           return el ? el.textContent.trim().slice(0, 40) : "no-trigger";
         })
         .catch(() => "eval-failed");
+    const committed = (t) => t && !/enter country/i.test(t) && t !== "no-trigger";
+
+    let pickErr = "";
+    // Keyboard first — immune to the re-render/click-position race. The input
+    // has focus, so ArrowDown highlights the first row (the country itself when
+    // the full name was typed) and Enter selects it.
+    await page.keyboard.press("ArrowDown").catch(() => {});
+    await page.waitForTimeout(500);
+    await page.keyboard.press("Enter").catch(() => {});
+    await page.waitForTimeout(1500);
     let locAfter = await readTrigger();
-    if (/enter country/i.test(locAfter)) {
-      // The click didn't commit — try confirming the highlighted row with Enter.
-      await page.keyboard.press("Enter").catch(() => {});
-      await page.waitForTimeout(1500);
-      locAfter = `${locAfter} -> afterEnter:${await readTrigger()}`;
+    let picked = committed(locAfter);
+
+    // Fallback: click the matching row.
+    if (!picked) {
+      const target = optionTexts.filter({ hasText: countryRe }).first();
+      if (await target.count().catch(() => 0)) {
+        try {
+          await target.click({ timeout: 6000 });
+        } catch (e) {
+          pickErr = String(e.message || "").slice(0, 50);
+        }
+        await page.waitForTimeout(1500);
+        const afterClick = await readTrigger();
+        locAfter = `${locAfter} -> afterClick:${afterClick}`;
+        picked = committed(afterClick);
+      }
     }
     const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"} trigger:${locAfter}`;
     if (!picked) {
