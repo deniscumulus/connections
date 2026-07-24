@@ -252,11 +252,17 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // (the page's other boxes are "Search" / "Enter domain or URL").
     const locInput = page.locator('input[placeholder*="postal" i]').first();
     await locInput.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
-    // The picker opens with its search field already focused, so type straight
-    // into it with real key events. Clicking + fill("") on the input first was
-    // disturbing the component so its search never fired — typed manually, the
-    // full country name does return suggestions.
-    await page.keyboard.type(country, { delay: 120 });
+    // Click the picker's field to focus it (typing needs focus), then type with
+    // real key events. Do NOT fill("") first — that set the value directly and
+    // left the component's search unfired, which is why the suggestion list never
+    // rendered even though the text sat in the box.
+    if (await locInput.count().catch(() => 0)) {
+      await locInput.click().catch(() => {});
+      await page.waitForTimeout(300);
+      await locInput.pressSequentially(country, { delay: 120 }).catch(() => {});
+    } else {
+      await page.keyboard.type(country, { delay: 120 });
+    }
     await page.waitForTimeout(2500);
     // State right after typing: is the location field filled, and did the
     // suggestion list appear? (The picker requires PICKING a suggestion —
