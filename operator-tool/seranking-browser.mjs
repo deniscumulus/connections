@@ -159,10 +159,18 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // if that call errors in the automated browser the list never renders even
     // though the typed text is in the box (exactly what we're seeing).
     const failedRequests = [];
+    // The location suggestions come from api.se.googleplaces.html?do=AllPlaces&
+    // query=... (fires per keystroke, 200). Log it regardless of status so we can
+    // tell "the search never ran" from "it ran and my click missed the list".
+    const placesRequests = [];
     page.on("response", (resp) => {
       try {
+        const url = resp.url();
+        if (/googleplaces/i.test(url)) {
+          placesRequests.push(`${resp.status()} ${(url.split("?")[1] || "").slice(0, 60)}`);
+        }
         if (resp.status() >= 400) {
-          failedRequests.push(`${resp.status()} ${resp.url().replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
+          failedRequests.push(`${resp.status()} ${url.replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
         }
       } catch {
         /* ignore */
@@ -350,7 +358,7 @@ export async function setupSERankingBrowser(run, auth = {}) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"}`
+        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"} || PLACES: ${placesRequests.slice(-6).join(" ; ") || "none"}`
       };
     }
 
