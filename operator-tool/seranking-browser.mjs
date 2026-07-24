@@ -363,7 +363,24 @@ export async function setupSERankingBrowser(run, auth = {}) {
         pickErr = String(e.message || "").slice(0, 60);
       }
     }
-    const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"}`;
+    await page.waitForTimeout(1500);
+    // Did the pick actually commit? The trigger should now show the country
+    // instead of the placeholder. (Selector taken from the live DOM.)
+    const readTrigger = () =>
+      page
+        .evaluate(() => {
+          const el = document.querySelector('[data-testid="wizard-location-dropdown"] .ui-select-trigger__text');
+          return el ? el.textContent.trim().slice(0, 40) : "no-trigger";
+        })
+        .catch(() => "eval-failed");
+    let locAfter = await readTrigger();
+    if (/enter country/i.test(locAfter)) {
+      // The click didn't commit — try confirming the highlighted row with Enter.
+      await page.keyboard.press("Enter").catch(() => {});
+      await page.waitForTimeout(1500);
+      locAfter = `${locAfter} -> afterEnter:${await readTrigger()}`;
+    }
+    const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"} trigger:${locAfter}`;
     if (!picked) {
       await page.keyboard.press("ArrowDown").catch(() => {});
       await page.keyboard.press("Enter").catch(() => {});
