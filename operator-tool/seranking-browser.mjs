@@ -299,7 +299,28 @@ export async function setupSERankingBrowser(run, auth = {}) {
       }, country)
       .catch(() => {});
 
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(4000);
+    // The suggestions XHR returns 200, so results DO come back — the failure is
+    // in finding/clicking the rendered row. List the visible leaf elements whose
+    // text contains the country so we can target them exactly.
+    const matchDiag = await page
+      .evaluate((c) => {
+        const out = [];
+        for (const el of document.querySelectorAll("*")) {
+          if (out.length >= 5) break;
+          const t = (el.textContent || "").trim();
+          if (
+            t.includes(c) &&
+            el.children.length === 0 &&
+            el.getBoundingClientRect().width > 0
+          ) {
+            out.push(`${el.tagName}.${String(el.className || "").slice(0, 22)}|${t.slice(0, 38)}`);
+          }
+        }
+        return out.join(" ; ") || "no-visible-match";
+      }, country)
+      .catch(() => "eval-failed");
+
     // State right after typing: is the location field filled, and did the
     // suggestion list appear? (The picker requires PICKING a suggestion —
     // "Type in a new location name to view the schedules.")
@@ -358,7 +379,7 @@ export async function setupSERankingBrowser(run, auth = {}) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"} || PLACES: ${placesRequests.slice(-6).join(" ; ") || "none"}`
+        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"} || PLACES: ${placesRequests.slice(-6).join(" ; ") || "none"} || MATCH: ${matchDiag}`
       };
     }
 
