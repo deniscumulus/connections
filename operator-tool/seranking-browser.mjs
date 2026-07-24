@@ -195,67 +195,62 @@ export async function setupSERankingBrowser(run, auth = {}) {
           : "SE Ranking login blocked (reCAPTCHA) — use session cookies instead."
       };
     }
-    // Step 1 field.
-    const urlField = page
-      .locator('input[placeholder*="Website URL" i], input[placeholder*="URL" i], input[type="url"]')
-      .first();
-    await urlField.waitFor({ state: "visible", timeout: 25000 }).catch(() => {});
-
-    // ---- Step 1: General information ----
+    // ---- The wizard is a SINGLE-PAGE form (confirmed from a live snapshot) ----
+    // Placeholders: "Enter domain or URL", "Enter project name", "Enter keywords".
+    // Engine buttons: Google / AI Overviews / AI Mode / ChatGPT (Google is the
+    // default). Location control: "Enter country, city". Submit: "Start tracking".
+    const urlField = page.getByPlaceholder(/enter domain or url/i).first();
+    await urlField.waitFor({ state: "visible", timeout: 25000 });
     await urlField.click().catch(() => {});
     await urlField.fill(run.siteUrl).catch(() => {});
-    // Project name (can be the domain; keep the tool's derived name).
-    const nameField = page.locator('input[placeholder*="Project name" i], input[placeholder*="name" i]').nth(1);
+    await page.waitForTimeout(400);
+
+    const nameField = page.getByPlaceholder(/enter project name/i).first();
     if (await nameField.count().catch(() => 0)) {
-      await nameField.fill("").catch(() => {});
+      await nameField.click().catch(() => {});
       await nameField.fill(run.projectName || run.siteUrl).catch(() => {});
     }
-    await page.waitForTimeout(500);
-    await clickButtonByText(page, /next step|next|continue/i);
-    await page.waitForTimeout(1500);
 
-    // Capture the site_id the wizard assigns after step 1.
-    let siteId = extractSiteId(page.url());
+    // Make sure the classic Google engine is the selected one.
+    await clickButtonByText(page, /^google$/i).catch(() => {});
 
-    // ---- Step 2: Search engines (Google desktop + mobile for the market) ----
+    // Location: type the market's country and pick the first suggestion.
     const country = MARKET_COUNTRY[run.market] || "United Kingdom";
-    await selectWizardDropdown(page, /country/i, country).catch(() => {});
-    // desktop + mobile device toggles are usually icon buttons near the engine row;
-    // best-effort — try to enable both. (Verify in a test run.)
-    await clickButtonByText(page, /add search engine/i);
-    await page.waitForTimeout(1200);
-    await clickButtonByText(page, /next step|next|continue/i);
-    await page.waitForTimeout(1200);
+    const locField = page.getByPlaceholder(/country|city/i).first();
+    if (await locField.count().catch(() => 0)) {
+      await locField.click().catch(() => {});
+      await locField.fill("").catch(() => {});
+      await locField.pressSequentially(country, { delay: 60 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      const option = page.getByText(country, { exact: false }).last();
+      if (await option.count().catch(() => 0)) {
+        await option.click({ timeout: 4000 }).catch(() => {});
+      } else {
+        await locField.press("Enter").catch(() => {});
+      }
+      await page.waitForTimeout(600);
+    }
 
-    // ---- Step 3: Keywords ----
+    // Keywords (one per line).
     const keywords = (run.defaults?.seRankingKeywords || [])
       .map((k) => String(k).trim())
       .filter(Boolean)
       .slice(0, 10);
     if (keywords.length) {
-      const kwBox = page.locator("textarea").first();
-      if (await kwBox.count().catch(() => 0)) {
-        await kwBox.click().catch(() => {});
-        await kwBox.fill(keywords.join("\n")).catch(() => {});
+      const kwField = page.getByPlaceholder(/enter keywords/i).first();
+      if (await kwField.count().catch(() => 0)) {
+        await kwField.click().catch(() => {});
+        await kwField.fill(keywords.join("\n")).catch(() => {});
         await page.waitForTimeout(500);
-        await clickButtonByText(page, /add keywords/i);
-        await page.waitForTimeout(800);
       }
     }
-    await clickButtonByText(page, /next step|next|continue/i);
-    await page.waitForTimeout(1000);
 
-    // ---- Step 4: Prompts (skip) ----
-    await clickButtonByText(page, /next step|next|continue/i);
-    await page.waitForTimeout(800);
+    // Submit — "Start tracking" creates the project.
+    const finished = await clickButtonByText(page, /start tracking/i, { timeout: 10000 });
+    await page.waitForTimeout(6000);
+    await page.waitForLoadState("networkidle").catch(() => {});
 
-    // ---- Step 5: Competitors (skip) ----
-    await clickButtonByText(page, /next step|next|continue/i);
-    await page.waitForTimeout(800);
-
-    // ---- Step 6: Statistics & Analytics (skip) -> Finish ----
-    const finished = await clickButtonByText(page, /finish|done|complete/i);
-    await page.waitForTimeout(2500);
+    let siteId = extractSiteId(page.url());
 
     if (!siteId) siteId = extractSiteId(page.url());
 
