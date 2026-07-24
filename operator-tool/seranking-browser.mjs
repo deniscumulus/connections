@@ -155,6 +155,20 @@ export async function setupSERankingBrowser(run, auth = {}) {
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
 
+    // Record failed responses — the location suggestions come from an XHR, and
+    // if that call errors in the automated browser the list never renders even
+    // though the typed text is in the box (exactly what we're seeing).
+    const failedRequests = [];
+    page.on("response", (resp) => {
+      try {
+        if (resp.status() >= 400) {
+          failedRequests.push(`${resp.status()} ${resp.url().replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+
     // 1. Login (only when no session cookies — expect reCAPTCHA to block this).
     if (!usedSession) {
     await page.goto("https://online.seranking.com/login.html");
@@ -322,7 +336,7 @@ export async function setupSERankingBrowser(run, auth = {}) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag}`
+        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"}`
       };
     }
 
