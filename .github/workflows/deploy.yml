@@ -22,6 +22,7 @@ jobs:
           SEEMAIL: ${{ secrets.SEEMAIL }}
           SEPASS: ${{ secrets.SEPASS }}
           SERANKING_API_KEY: ${{ secrets.SERANKING_API_KEY }}
+          SECOOKIES: ${{ secrets.SERANKING_COOKIES_B64 }}
         run: |
           b64() { printf '%s' "$1" | base64 -w0; }
           {
@@ -33,6 +34,7 @@ jobs:
             echo "SERANKING_EMAIL=$SEEMAIL"
             echo "SERANKING_PASSWORD_B64=$(b64 "$SEPASS")"
             echo "SERANKING_API_KEY=$SERANKING_API_KEY"
+            echo "SERANKING_COOKIES_B64=$SECOOKIES"
           } > operator-tool/.env
 
       - name: Sync Files to OVH VPS
