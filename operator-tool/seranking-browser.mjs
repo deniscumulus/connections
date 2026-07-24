@@ -339,6 +339,22 @@ export async function setupSERankingBrowser(run, auth = {}) {
       await page.waitForTimeout(1200);
       picked = committed(await readTrigger());
     }
+    // Last resort: dispatch the events straight at the element. A real click
+    // lands without error yet the component ignores it, so bypass hit-testing
+    // and fire mousedown/mouseup/click on the row itself (Vue handlers are
+    // usually bound on .ui-option).
+    if (!picked) {
+      const row = optionRows.filter({ hasText: countryRe }).first();
+      for (const el of [row, target]) {
+        if (picked) break;
+        if (!(await el.count().catch(() => 0))) continue;
+        for (const ev of ["mousedown", "mouseup", "click"]) {
+          await el.dispatchEvent(ev).catch(() => {});
+        }
+        await page.waitForTimeout(1200);
+        picked = committed(await readTrigger());
+      }
+    }
     const locAfter = await readTrigger();
 
     // Diagnostics AFTER the attempt, so they can't eat the dropdown's lifetime.
