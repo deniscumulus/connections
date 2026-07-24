@@ -45,6 +45,54 @@ async function clickButtonByText(page, re, { timeout = 8000, force = false } = {
   }
 }
 
+// Turn on "Advanced settings" — that switches the wizard from the quick
+// single-page form (whose Location autocomplete never commits a pick) to the
+// multi-step flow, where Country is an ordinary dropdown.
+async function toggleAdvanced(page) {
+  const sw = page.getByRole("switch", { name: /advanced/i }).first();
+  if (await sw.count().catch(() => 0)) {
+    const checked = await sw.getAttribute("aria-checked").catch(() => null);
+    if (checked !== "true") await sw.click({ timeout: 5000 }).catch(() => {});
+    return "switch";
+  }
+  const label = page.getByText(/advanced settings/i).first();
+  if (await label.count().catch(() => 0)) {
+    await label.click({ timeout: 5000 }).catch(() => {});
+    return "label";
+  }
+  return "not-found";
+}
+
+// Country in advanced mode: try a native <select> first, then a custom dropdown.
+async function selectCountryAdvanced(page, country) {
+  const selects = page.locator("select");
+  const n = await selects.count().catch(() => 0);
+  for (let i = 0; i < n; i += 1) {
+    try {
+      await selects.nth(i).selectOption({ label: country }, { timeout: 3000 });
+      return "select";
+    } catch {
+      /* not this one */
+    }
+  }
+  const re = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const trigger = page
+    .locator('[role="combobox"], [class*="select-trigger" i], [class*="select" i], button')
+    .filter({ hasText: /country|united states|choose|select/i })
+    .first();
+  if (await trigger.count().catch(() => 0)) {
+    await trigger.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+    const opt = page.locator('.ui-option, [role="option"], li').filter({ hasText: re }).first();
+    if (await opt.count().catch(() => 0)) {
+      await opt.click({ timeout: 5000 }).catch(() => {});
+      return "custom";
+    }
+    return "opened-no-option";
+  }
+  return "no-trigger";
+}
+
 // Snapshot of the current wizard step for diagnostics when something fails.
 async function snapshot(page) {
   return page
@@ -229,174 +277,75 @@ export async function setupSERankingBrowser(run, auth = {}) {
           : "SE Ranking login blocked (reCAPTCHA) — use session cookies instead."
       };
     }
-    // ---- The wizard is a SINGLE-PAGE form (confirmed from a live snapshot) ----
-    // Placeholders: "Enter domain or URL", "Enter project name", "Enter keywords".
-    // Engine buttons: Google / AI Overviews / AI Mode / ChatGPT (Google is the
-    // default). Location control: "Enter country, city". Submit: "Start tracking".
-    const urlField = page.getByPlaceholder(/enter domain or url/i).first();
-    await urlField.waitFor({ state: "visible", timeout: 25000 });
+    // ---- ADVANCED mode ----
+    // The quick single-page form's Location is an autocomplete that never
+    // commits a pick (typing works, list renders, click runs clean — the
+    // component just ignores it; ~10 approaches tried). Advanced settings opens
+    // the multi-step wizard where Country is a plain dropdown instead.
+    const stepDiags = [`advanced:${await toggleAdvanced(page)}`];
+    await page.waitForTimeout(2000);
+
+    // ---- Step 1: General information ----
+    const urlField = page.getByPlaceholder(/website url|enter domain or url|url/i).first();
+    await urlField.waitFor({ state: "visible", timeout: 20000 }).catch(() => {});
     await urlField.click().catch(() => {});
     await urlField.fill(run.siteUrl).catch(() => {});
-    await page.waitForTimeout(400);
-
-    const nameField = page.getByPlaceholder(/enter project name/i).first();
+    const nameField = page.getByPlaceholder(/project name/i).first();
     if (await nameField.count().catch(() => 0)) {
       await nameField.click().catch(() => {});
       await nameField.fill(run.projectName || run.siteUrl).catch(() => {});
     }
+    await page.waitForTimeout(800);
+    stepDiags.push(`s1next:${await clickButtonByText(page, /next step|next|continue/i)}`);
+    await page.waitForTimeout(3000);
+    // Step 1 creates the site and puts its id in the wizard URL.
+    let siteId = extractSiteId(page.url());
+    stepDiags.push(`siteId:${siteId || "-"}`);
 
-    // Make sure the classic Google engine is the selected one.
-    await clickButtonByText(page, /^google$/i).catch(() => {});
-
-    // Location is a BUTTON ("Enter country, city"), not an input — clicking it
-    // opens a picker with a search box. Leaving it empty fails validation with
-    // "Enter country, city or postal code".
+    // ---- Step 2: Search engines (Country is a normal dropdown in this mode) ----
     const country = MARKET_COUNTRY[run.market] || "United Kingdom";
-    // The location field only exists once the picker is open (the closed state
-    // is just a button), and the page has its own "Search" box, so selectors are
-    // unreliable here. Open the picker and type into whatever it focuses.
-    // The "Keyword suggestions" panel is open by default and can cover the
-    // location control — dismiss it first, otherwise the click is intercepted and
-    // silently does nothing. (Its "Search" box belongs to keyword suggestions,
-    // NOT the country: typing the country there just yields "Nothing found".)
-    await page.keyboard.press("Escape").catch(() => {});
-    await page.waitForTimeout(600);
-    let countryClicked = await clickButtonByText(page, /enter country|country, ?city/i);
-    if (!countryClicked) {
-      countryClicked = await clickButtonByText(page, /enter country|country, ?city/i, { force: true });
-    }
-    await page.waitForTimeout(1500);
-    // Capture what the picker looks like right after opening — this is the only
-    // way to see it, since it's gone by the time the failure snapshot is taken.
-    const pickerDiag = `countryBtnClicked:${countryClicked} ` + (await snapshot(page));
-    // The opened picker renders its own input with placeholder
-    // "Enter country, city or postal code" — "postal" uniquely identifies it
-    // (the page's other boxes are "Search" / "Enter domain or URL").
-    const locInput = page.locator('input[placeholder*="postal" i]').first();
-    await locInput.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
-    // Click the picker's field to focus it (typing needs focus), then type with
-    // real key events. Do NOT fill("") first — that set the value directly and
-    // left the component's search unfired, which is why the suggestion list never
-    // rendered even though the text sat in the box.
-    if (await locInput.count().catch(() => 0)) {
-      await locInput.click().catch(() => {});
-      await page.waitForTimeout(300);
-      await locInput.pressSequentially(country, { delay: 120 }).catch(() => {});
-    } else {
-      await page.keyboard.type(country, { delay: 120 });
-    }
-    // Nudge React: some controlled inputs don't run their search on synthetic
-    // typing. Set the value through the native setter and dispatch a bubbling
-    // input event — that's the change React actually listens for.
-    await page
-      .evaluate((val) => {
-        const input = document.querySelector('input[placeholder*="postal" i]');
-        if (!input) return;
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-        if (setter) setter.call(input, val);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }, country)
-      .catch(() => {});
-
-    // The dropdown auto-closes a few seconds after typing, so SELECT FIRST and
-    // run the diagnostics afterwards. The previous order (4s pause + two
-    // evaluates + a 2s "settle") burned the whole window — by the time we picked,
-    // the list was already gone (rows:0) and the click just dismissed it.
-    const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    const optionRows = page.locator('.ui-option[role="option"]');
-    const optionTexts = page.locator(".ui-option__content");
-    await optionTexts.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
-
-    // The trigger shows the chosen location once a pick commits.
-    const readTrigger = () =>
-      page
-        .evaluate(() => {
-          const el = document.querySelector('[data-testid="wizard-location-dropdown"] .ui-select-trigger__text');
-          return el ? el.textContent.trim().slice(0, 40) : "no-trigger";
-        })
-        .catch(() => "eval-failed");
-    const committed = (t) => t && !/enter country/i.test(t) && t !== "no-trigger";
-
-    let picked = false;
-    let pickErr = "";
-    // Click the matching row straight away, while the list is still open.
-    const target = optionTexts.filter({ hasText: countryRe }).first();
-    if (await target.count().catch(() => 0)) {
-      try {
-        await target.click({ timeout: 5000 });
-      } catch (e) {
-        pickErr = String(e.message || "").slice(0, 50);
-      }
-      await page.waitForTimeout(1200);
-      picked = committed(await readTrigger());
-    }
-    // Fallback: keyboard selection (the input still holds focus).
-    if (!picked) {
-      await page.keyboard.press("ArrowDown").catch(() => {});
-      await page.waitForTimeout(300);
-      await page.keyboard.press("Enter").catch(() => {});
-      await page.waitForTimeout(1200);
-      picked = committed(await readTrigger());
-    }
-    // Last resort: dispatch the events straight at the element. A real click
-    // lands without error yet the component ignores it, so bypass hit-testing
-    // and fire mousedown/mouseup/click on the row itself (Vue handlers are
-    // usually bound on .ui-option).
-    if (!picked) {
-      const row = optionRows.filter({ hasText: countryRe }).first();
-      for (const el of [row, target]) {
-        if (picked) break;
-        if (!(await el.count().catch(() => 0))) continue;
-        for (const ev of ["mousedown", "mouseup", "click"]) {
-          await el.dispatchEvent(ev).catch(() => {});
-        }
-        await page.waitForTimeout(1200);
-        picked = committed(await readTrigger());
-      }
-    }
-    const locAfter = await readTrigger();
-
-    // Diagnostics AFTER the attempt, so they can't eat the dropdown's lifetime.
-    const matchDiag = await page
-      .evaluate((c) => {
-        const out = [];
-        for (const el of document.querySelectorAll("*")) {
-          if (out.length >= 5) break;
-          const t = (el.textContent || "").trim();
-          if (t.includes(c) && el.children.length === 0 && el.getBoundingClientRect().width > 0) {
-            out.push(`${el.tagName}.${String(el.className || "").slice(0, 22)}|${t.slice(0, 38)}`);
-          }
-        }
-        return out.join(" ; ") || "no-visible-match";
-      }, country)
-      .catch(() => "eval-failed");
-    const typedDiag = await snapshot(page);
-    const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"} trigger:${locAfter}`;
+    stepDiags.push(`country:${await selectCountryAdvanced(page, country)}`);
+    await page.waitForTimeout(800);
+    stepDiags.push(`addEngine:${await clickButtonByText(page, /add search engine/i)}`);
     await page.waitForTimeout(2000);
+    stepDiags.push(`s2next:${await clickButtonByText(page, /next step|next|continue/i)}`);
+    await page.waitForTimeout(2500);
 
-    // Keywords (one per line).
+    // ---- Step 3: Keywords ----
     const keywords = (run.defaults?.seRankingKeywords || [])
       .map((k) => String(k).trim())
       .filter(Boolean)
       .slice(0, 10);
     if (keywords.length) {
-      const kwField = page.getByPlaceholder(/enter keywords/i).first();
-      if (await kwField.count().catch(() => 0)) {
-        await kwField.click().catch(() => {});
-        await kwField.fill(keywords.join("\n")).catch(() => {});
-        await page.waitForTimeout(500);
+      const kwBox = page.locator("textarea").first();
+      if (await kwBox.count().catch(() => 0)) {
+        await kwBox.click().catch(() => {});
+        await kwBox.fill(keywords.join("\n")).catch(() => {});
+        await page.waitForTimeout(800);
+        stepDiags.push(`addKw:${await clickButtonByText(page, /add keywords/i)}`);
+        await page.waitForTimeout(1500);
       }
     }
+    stepDiags.push(`s3next:${await clickButtonByText(page, /next step|next|continue/i)}`);
+    await page.waitForTimeout(2000);
 
-    // Submit — "Start tracking" creates the project.
-    const finished = await clickButtonByText(page, /start tracking/i, { timeout: 10000 });
-    await page.waitForTimeout(6000);
+    // ---- Steps 4 & 5: Prompts / Competitors — skipped ----
+    stepDiags.push(`s4next:${await clickButtonByText(page, /next step|next|continue/i)}`);
+    await page.waitForTimeout(1500);
+    stepDiags.push(`s5next:${await clickButtonByText(page, /next step|next|continue/i)}`);
+    await page.waitForTimeout(1500);
+
+    // ---- Step 6: Statistics & analytics — skipped, then Finish ----
+    const finished = await clickButtonByText(page, /finish|done|complete/i, { timeout: 10000 });
+    stepDiags.push(`finish:${finished}`);
+    await page.waitForTimeout(5000);
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    let siteId = extractSiteId(page.url());
-
     if (!siteId) siteId = extractSiteId(page.url());
+    const pickDiag = stepDiags.join(" ");
+    const matchDiag = "-";
+    const typedDiag = await snapshot(page);
+    const pickerDiag = "-";
 
     if (!siteId) {
       const snap = await snapshot(page);
