@@ -340,26 +340,30 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // ("United Kingdom of Great Britain and N..."), so match on it and fall back
     // to the first row.
     const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    // The row text lives in div.ui-option__content inside div.ui-option[role=
+    // "option"] (confirmed live). Try the text leaf, then the row, then the first
+    // row — and record the outcome so a silent miss can't hide again.
+    const optionRows = page.locator('.ui-option[role="option"]');
+    const optionTexts = page.locator(".ui-option__content");
+    await optionTexts.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
     let picked = false;
-    const options = page.locator('.ui-option[role="option"], [role="option"]');
-    await options.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
-    const target = options.filter({ hasText: countryRe }).first();
-    if (await target.count().catch(() => 0)) {
+    let pickErr = "";
+    const candidates = [
+      optionTexts.filter({ hasText: countryRe }).first(),
+      optionRows.filter({ hasText: countryRe }).first(),
+      optionTexts.first()
+    ];
+    for (const cand of candidates) {
+      if (picked) break;
+      if (!(await cand.count().catch(() => 0))) continue;
       try {
-        await target.click({ timeout: 6000 });
+        await cand.click({ timeout: 6000 });
         picked = true;
-      } catch {
-        /* fall through */
+      } catch (e) {
+        pickErr = String(e.message || "").slice(0, 60);
       }
     }
-    if (!picked && (await options.count().catch(() => 0))) {
-      try {
-        await options.first().click({ timeout: 6000 });
-        picked = true;
-      } catch {
-        /* fall through to keyboard */
-      }
-    }
+    const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"}`;
     if (!picked) {
       await page.keyboard.press("ArrowDown").catch(() => {});
       await page.keyboard.press("Enter").catch(() => {});
@@ -394,7 +398,7 @@ export async function setupSERankingBrowser(run, auth = {}) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"} || PLACES: ${placesRequests.slice(-6).join(" ; ") || "none"} || MATCH: ${matchDiag}`
+        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag} || FAILED: ${failedRequests.slice(-6).join(" ; ") || "none"} || PLACES: ${placesRequests.slice(-6).join(" ; ") || "none"} || MATCH: ${matchDiag} || PICK: ${pickDiag}`
       };
     }
 
