@@ -34,7 +34,7 @@ jobs:
             echo "SERANKING_EMAIL=$SEEMAIL"
             echo "SERANKING_PASSWORD_B64=$(b64 "$SEPASS")"
             echo "SERANKING_API_KEY=$SERANKING_API_KEY"
-            echo "SERANKING_COOKIES_B64=$SECOOKIES"
+            echo "SERANKING_COOKIES_B64=$(printf '%s' "$SECOOKIES" | tr -d '\n\r')"
           } > operator-tool/.env
 
       - name: Sync Files to OVH VPS
