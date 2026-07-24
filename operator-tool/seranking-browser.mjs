@@ -31,14 +31,18 @@ const MARKET_COUNTRY = {
   CL: "Chile"
 };
 
-async function clickButtonByText(page, re, { timeout = 8000 } = {}) {
+// Returns whether the click actually landed — a covered/intercepted click must
+// not report success (that hid the location-button failure for several rounds).
+async function clickButtonByText(page, re, { timeout = 8000, force = false } = {}) {
   const btn = page.getByRole("button", { name: re }).first();
-  if (await btn.count().catch(() => 0)) {
-    await btn.scrollIntoViewIfNeeded().catch(() => {});
-    await btn.click({ timeout }).catch(() => {});
+  if (!(await btn.count().catch(() => 0))) return false;
+  await btn.scrollIntoViewIfNeeded().catch(() => {});
+  try {
+    await btn.click({ timeout, force });
     return true;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 // Snapshot of the current wizard step for diagnostics when something fails.
@@ -227,22 +231,22 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // The location field only exists once the picker is open (the closed state
     // is just a button), and the page has its own "Search" box, so selectors are
     // unreliable here. Open the picker and type into whatever it focuses.
-    const countryClicked = await clickButtonByText(page, /enter country|country, ?city/i);
+    // The "Keyword suggestions" panel is open by default and can cover the
+    // location control — dismiss it first, otherwise the click is intercepted and
+    // silently does nothing. (Its "Search" box belongs to keyword suggestions,
+    // NOT the country: typing the country there just yields "Nothing found".)
+    await page.keyboard.press("Escape").catch(() => {});
+    await page.waitForTimeout(600);
+    let countryClicked = await clickButtonByText(page, /enter country|country, ?city/i);
+    if (!countryClicked) {
+      countryClicked = await clickButtonByText(page, /enter country|country, ?city/i, { force: true });
+    }
     await page.waitForTimeout(1500);
     // Capture what the picker looks like right after opening — this is the only
     // way to see it, since it's gone by the time the failure snapshot is taken.
     const pickerDiag = `countryBtnClicked:${countryClicked} ` + (await snapshot(page));
-    // Clicking the button adds no new field, so the existing "Search" box is the
-    // picker's input. Click it explicitly (keyboard.type alone went nowhere
-    // because the button click didn't move focus), then type the country.
-    const searchBox = page.getByPlaceholder("Search", { exact: true }).first();
-    if (await searchBox.count().catch(() => 0)) {
-      await searchBox.click().catch(() => {});
-      await searchBox.fill("").catch(() => {});
-      await searchBox.pressSequentially(country, { delay: 70 }).catch(() => {});
-    } else {
-      await page.keyboard.type(country, { delay: 70 });
-    }
+    // Type into whatever the picker focuses.
+    await page.keyboard.type(country, { delay: 70 });
     await page.waitForTimeout(2500);
     // Choose the matching suggestion; fall back to keyboard selection.
     const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
