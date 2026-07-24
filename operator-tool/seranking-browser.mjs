@@ -252,17 +252,11 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // (the page's other boxes are "Search" / "Enter domain or URL").
     const locInput = page.locator('input[placeholder*="postal" i]').first();
     await locInput.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
-    // Type only a short PREFIX. Typing the full name returns no suggestions at
-    // all (proven: with "United Kingdom" the list never renders), while a few
-    // characters do — Denis's screenshot showed "uni" listing the UK entry.
-    const prefix = country.slice(0, 5);
-    if (await locInput.count().catch(() => 0)) {
-      await locInput.click().catch(() => {});
-      await locInput.fill("").catch(() => {});
-      await locInput.pressSequentially(prefix, { delay: 120 }).catch(() => {});
-    } else {
-      await page.keyboard.type(prefix, { delay: 120 });
-    }
+    // The picker opens with its search field already focused, so type straight
+    // into it with real key events. Clicking + fill("") on the input first was
+    // disturbing the component so its search never fired — typed manually, the
+    // full country name does return suggestions.
+    await page.keyboard.type(country, { delay: 120 });
     await page.waitForTimeout(2500);
     // State right after typing: is the location field filled, and did the
     // suggestion list appear? (The picker requires PICKING a suggestion —
