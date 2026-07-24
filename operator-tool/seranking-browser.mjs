@@ -70,7 +70,7 @@ async function snapshot(page) {
         .filter((f) => /recaptcha|captcha|hcaptcha/i.test(f.src || ""))
         .map((f) => (f.getBoundingClientRect().width > 0 ? "visible-captcha" : "hidden-captcha"));
       // Any open dropdown/listbox/dialog — tells us if a picker actually opened.
-      const popups = [...document.querySelectorAll('[role="listbox"], [role="dialog"], [role="menu"], [class*="dropdown" i], [class*="popup" i], [class*="suggest" i]')]
+      const popups = [...document.querySelectorAll('[role="listbox"], [role="dialog"], [role="menu"], [class*="dropdown" i], [class*="popup" i], [class*="suggest" i], ul, [class*="list" i]')]
         .filter((el) => el.getBoundingClientRect().width > 0)
         .map((el) => clip(el.textContent, 50))
         .filter(Boolean)
@@ -269,12 +269,16 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // schedules."). Wait for the suggestion to render, then click it.
     // getByText matches text nodes only, so it hits the dropdown entry and not
     // the input (whose *value* is the country).
-    const suggestion = page.getByText(country, { exact: false }).first();
-    await suggestion.waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
+    // Require :visible — plain getByText was resolving to an off-screen node, so
+    // the click timed out and nothing got selected. Note the UK is listed as
+    // "United Kingdom of Great Britain and Northern Ireland", so the configured
+    // name matches as a prefix.
     let picked = false;
-    if (await suggestion.count().catch(() => 0)) {
+    const visibleSuggestion = page.locator(`:text("${country}"):visible`).first();
+    await visibleSuggestion.waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
+    if (await visibleSuggestion.count().catch(() => 0)) {
       try {
-        await suggestion.click({ timeout: 6000 });
+        await visibleSuggestion.click({ timeout: 6000 });
         picked = true;
       } catch {
         /* fall through to keyboard */
