@@ -54,11 +54,11 @@ async function snapshot(page) {
       const inputs = [...document.querySelectorAll("input,textarea")]
         .filter((el) => el.type !== "hidden")
         .map((el) => `${clip(el.placeholder || el.name || el.getAttribute("aria-label") || el.id || "in", 22)}=${clip(el.value, 22) || "∅"}`)
-        .slice(0, 12);
+        .slice(0, 20);
       const buttons = [...document.querySelectorAll("button")]
         .map((b) => clip(b.textContent, 20))
         .filter(Boolean)
-        .slice(0, 12);
+        .slice(0, 20);
       // Error / captcha signals: alert-ish text and any reCAPTCHA iframe.
       const errText = [...document.querySelectorAll('[role="alert"], .error, [class*="error" i], [class*="invalid" i], .notification, .toast')]
         .map((el) => clip(el.textContent, 60))
@@ -245,8 +245,18 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // Capture what the picker looks like right after opening — this is the only
     // way to see it, since it's gone by the time the failure snapshot is taken.
     const pickerDiag = `countryBtnClicked:${countryClicked} ` + (await snapshot(page));
-    // Type into whatever the picker focuses.
-    await page.keyboard.type(country, { delay: 70 });
+    // The opened picker renders its own input with placeholder
+    // "Enter country, city or postal code" — "postal" uniquely identifies it
+    // (the page's other boxes are "Search" / "Enter domain or URL").
+    const locInput = page.locator('input[placeholder*="postal" i]').first();
+    await locInput.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+    if (await locInput.count().catch(() => 0)) {
+      await locInput.click().catch(() => {});
+      await locInput.fill("").catch(() => {});
+      await locInput.pressSequentially(country, { delay: 70 }).catch(() => {});
+    } else {
+      await page.keyboard.type(country, { delay: 70 });
+    }
     await page.waitForTimeout(2500);
     // Choose the matching suggestion; fall back to keyboard selection.
     const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
