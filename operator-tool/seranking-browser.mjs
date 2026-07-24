@@ -334,12 +334,27 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // the click timed out and nothing got selected. Note the UK is listed as
     // "United Kingdom of Great Britain and Northern Ireland", so the configured
     // name matches as a prefix.
+    // Confirmed from the live DOM: the dropdown is div[role="menu"] with class
+    // ui-dropdown__options, and every suggestion row is div.ui-option[role=
+    // "option"]. Typing the full country name puts the country itself first
+    // ("United Kingdom of Great Britain and N..."), so match on it and fall back
+    // to the first row.
+    const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     let picked = false;
-    const visibleSuggestion = page.locator(`:text("${country}"):visible`).first();
-    await visibleSuggestion.waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
-    if (await visibleSuggestion.count().catch(() => 0)) {
+    const options = page.locator('.ui-option[role="option"], [role="option"]');
+    await options.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
+    const target = options.filter({ hasText: countryRe }).first();
+    if (await target.count().catch(() => 0)) {
       try {
-        await visibleSuggestion.click({ timeout: 6000 });
+        await target.click({ timeout: 6000 });
+        picked = true;
+      } catch {
+        /* fall through */
+      }
+    }
+    if (!picked && (await options.count().catch(() => 0))) {
+      try {
+        await options.first().click({ timeout: 6000 });
         picked = true;
       } catch {
         /* fall through to keyboard */
