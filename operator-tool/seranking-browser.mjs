@@ -218,35 +218,26 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // opens a picker with a search box. Leaving it empty fails validation with
     // "Enter country, city or postal code".
     const country = MARKET_COUNTRY[run.market] || "United Kingdom";
+    // The location field only exists once the picker is open (the closed state
+    // is just a button), and the page has its own "Search" box, so selectors are
+    // unreliable here. Open the picker and type into whatever it focuses.
     await clickButtonByText(page, /enter country|country, ?city/i);
-    await page.waitForTimeout(1200);
-    // Target the location input specifically — its placeholder matches the
-    // validation text ("Enter country, city or postal code"). Do NOT include a
-    // generic "search" placeholder: the page has its own "Search" box earlier in
-    // the DOM, and .first() would type the country into that instead.
-    const locSearch = page
-      .locator('input[placeholder*="country" i], input[placeholder*="city" i], input[placeholder*="postal" i]')
+    await page.waitForTimeout(1500);
+    await page.keyboard.type(country, { delay: 70 });
+    await page.waitForTimeout(2500);
+    // Choose the matching suggestion; fall back to keyboard selection.
+    const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const option = page
+      .locator('[role="option"], li, [class*="option" i], [class*="suggest" i]')
+      .filter({ hasText: countryRe })
       .first();
-    await locSearch.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
-    if (await locSearch.count().catch(() => 0)) {
-      await locSearch.click().catch(() => {});
-      await locSearch.fill("").catch(() => {});
-      await locSearch.pressSequentially(country, { delay: 70 }).catch(() => {});
-      await page.waitForTimeout(2500);
-      // Pick the matching suggestion from the dropdown list.
-      const re = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      const option = page
-        .locator('[role="option"], li, [class*="option" i], [class*="suggest" i], [class*="dropdown" i] *')
-        .filter({ hasText: re })
-        .first();
-      if (await option.count().catch(() => 0)) {
-        await option.click({ timeout: 5000 }).catch(() => {});
-      } else {
-        await locSearch.press("ArrowDown").catch(() => {});
-        await locSearch.press("Enter").catch(() => {});
-      }
-      await page.waitForTimeout(1200);
+    if (await option.count().catch(() => 0)) {
+      await option.click({ timeout: 5000 }).catch(() => {});
+    } else {
+      await page.keyboard.press("ArrowDown").catch(() => {});
+      await page.keyboard.press("Enter").catch(() => {});
     }
+    await page.waitForTimeout(1500);
 
     // Keywords (one per line).
     const keywords = (run.defaults?.seRankingKeywords || [])
