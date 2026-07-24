@@ -49,7 +49,7 @@ async function snapshot(page) {
       const heading = clip(document.querySelector("h1,h2,h3")?.textContent, 40);
       const inputs = [...document.querySelectorAll("input,textarea")]
         .filter((el) => el.type !== "hidden")
-        .map((el) => clip(el.placeholder || el.name || el.getAttribute("aria-label") || el.id || "in", 24))
+        .map((el) => `${clip(el.placeholder || el.name || el.getAttribute("aria-label") || el.id || "in", 22)}=${clip(el.value, 22) || "∅"}`)
         .slice(0, 12);
       const buttons = [...document.querySelectorAll("button")]
         .map((b) => clip(b.textContent, 20))
@@ -220,24 +220,32 @@ export async function setupSERankingBrowser(run, auth = {}) {
     const country = MARKET_COUNTRY[run.market] || "United Kingdom";
     await clickButtonByText(page, /enter country|country, ?city/i);
     await page.waitForTimeout(1200);
+    // Target the location input specifically — its placeholder matches the
+    // validation text ("Enter country, city or postal code"). Do NOT include a
+    // generic "search" placeholder: the page has its own "Search" box earlier in
+    // the DOM, and .first() would type the country into that instead.
     const locSearch = page
-      .locator(
-        'input[placeholder*="country" i], input[placeholder*="city" i], input[placeholder*="postal" i], input[placeholder*="search" i]'
-      )
+      .locator('input[placeholder*="country" i], input[placeholder*="city" i], input[placeholder*="postal" i]')
       .first();
+    await locSearch.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
     if (await locSearch.count().catch(() => 0)) {
       await locSearch.click().catch(() => {});
       await locSearch.fill("").catch(() => {});
-      await locSearch.pressSequentially(country, { delay: 60 }).catch(() => {});
-      await page.waitForTimeout(2000);
-      // Pick the matching suggestion from the dropdown.
-      const option = page.getByText(new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")).last();
+      await locSearch.pressSequentially(country, { delay: 70 }).catch(() => {});
+      await page.waitForTimeout(2500);
+      // Pick the matching suggestion from the dropdown list.
+      const re = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      const option = page
+        .locator('[role="option"], li, [class*="option" i], [class*="suggest" i], [class*="dropdown" i] *')
+        .filter({ hasText: re })
+        .first();
       if (await option.count().catch(() => 0)) {
         await option.click({ timeout: 5000 }).catch(() => {});
       } else {
+        await locSearch.press("ArrowDown").catch(() => {});
         await locSearch.press("Enter").catch(() => {});
       }
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1200);
     }
 
     // Keywords (one per line).
