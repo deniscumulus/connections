@@ -264,19 +264,27 @@ export async function setupSERankingBrowser(run, auth = {}) {
     // suggestion list appear? (The picker requires PICKING a suggestion —
     // "Type in a new location name to view the schedules.")
     const typedDiag = await snapshot(page);
-    // Choose the matching suggestion; fall back to keyboard selection.
-    const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    const option = page
-      .locator('[role="option"], li, [class*="option" i], [class*="suggest" i]')
-      .filter({ hasText: countryRe })
-      .first();
-    if (await option.count().catch(() => 0)) {
-      await option.click({ timeout: 5000 }).catch(() => {});
-    } else {
+    // The text alone isn't enough — the location is only committed when a
+    // SUGGESTION is picked ("Type in a new location name to view the
+    // schedules."). Wait for the suggestion to render, then click it.
+    // getByText matches text nodes only, so it hits the dropdown entry and not
+    // the input (whose *value* is the country).
+    const suggestion = page.getByText(country, { exact: false }).first();
+    await suggestion.waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
+    let picked = false;
+    if (await suggestion.count().catch(() => 0)) {
+      try {
+        await suggestion.click({ timeout: 6000 });
+        picked = true;
+      } catch {
+        /* fall through to keyboard */
+      }
+    }
+    if (!picked) {
       await page.keyboard.press("ArrowDown").catch(() => {});
       await page.keyboard.press("Enter").catch(() => {});
     }
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2000);
 
     // Keywords (one per line).
     const keywords = (run.defaults?.seRankingKeywords || [])
