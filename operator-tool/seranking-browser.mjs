@@ -51,8 +51,10 @@ async function snapshot(page) {
     .evaluate(() => {
       const clip = (s, n) => (s || "").replace(/\s+/g, " ").trim().slice(0, n);
       const heading = clip(document.querySelector("h1,h2,h3")?.textContent, 40);
+      // Skip checkboxes/radios — there are ~15 of them and they were flooding
+      // the list, truncating the real text fields (incl. the location input).
       const inputs = [...document.querySelectorAll("input,textarea")]
-        .filter((el) => el.type !== "hidden")
+        .filter((el) => !["hidden", "checkbox", "radio"].includes(el.type))
         .map((el) => `${clip(el.placeholder || el.name || el.getAttribute("aria-label") || el.id || "in", 22)}=${clip(el.value, 22) || "∅"}`)
         .slice(0, 20);
       const buttons = [...document.querySelectorAll("button")]
@@ -258,6 +260,10 @@ export async function setupSERankingBrowser(run, auth = {}) {
       await page.keyboard.type(country, { delay: 70 });
     }
     await page.waitForTimeout(2500);
+    // State right after typing: is the location field filled, and did the
+    // suggestion list appear? (The picker requires PICKING a suggestion —
+    // "Type in a new location name to view the schedules.")
+    const typedDiag = await snapshot(page);
     // Choose the matching suggestion; fall back to keyboard selection.
     const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     const option = page
@@ -300,7 +306,7 @@ export async function setupSERankingBrowser(run, auth = {}) {
       return {
         success: false,
         needsOperator: true,
-        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag}`
+        error: `SE Ranking wizard ran but no site_id was captured (finish clicked: ${finished}). ${snap} || PICKER: ${pickerDiag} || TYPED: ${typedDiag}`
       };
     }
 
