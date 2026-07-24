@@ -277,6 +277,20 @@ export async function setupSERankingBrowser(run, auth = {}) {
     } else {
       await page.keyboard.type(country, { delay: 120 });
     }
+    // Nudge React: some controlled inputs don't run their search on synthetic
+    // typing. Set the value through the native setter and dispatch a bubbling
+    // input event — that's the change React actually listens for.
+    await page
+      .evaluate((val) => {
+        const input = document.querySelector('input[placeholder*="postal" i]');
+        if (!input) return;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        if (setter) setter.call(input, val);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }, country)
+      .catch(() => {});
+
     await page.waitForTimeout(2500);
     // State right after typing: is the location field filled, and did the
     // suggestion list appear? (The picker requires PICKING a suggestion —
