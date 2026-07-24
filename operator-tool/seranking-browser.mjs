@@ -299,57 +299,14 @@ export async function setupSERankingBrowser(run, auth = {}) {
       }, country)
       .catch(() => {});
 
-    await page.waitForTimeout(4000);
-    // The suggestions XHR returns 200, so results DO come back — the failure is
-    // in finding/clicking the rendered row. List the visible leaf elements whose
-    // text contains the country so we can target them exactly.
-    const matchDiag = await page
-      .evaluate((c) => {
-        const out = [];
-        for (const el of document.querySelectorAll("*")) {
-          if (out.length >= 5) break;
-          const t = (el.textContent || "").trim();
-          if (
-            t.includes(c) &&
-            el.children.length === 0 &&
-            el.getBoundingClientRect().width > 0
-          ) {
-            out.push(`${el.tagName}.${String(el.className || "").slice(0, 22)}|${t.slice(0, 38)}`);
-          }
-        }
-        return out.join(" ; ") || "no-visible-match";
-      }, country)
-      .catch(() => "eval-failed");
-
-    // State right after typing: is the location field filled, and did the
-    // suggestion list appear? (The picker requires PICKING a suggestion —
-    // "Type in a new location name to view the schedules.")
-    const typedDiag = await snapshot(page);
-    // The text alone isn't enough — the location is only committed when a
-    // SUGGESTION is picked ("Type in a new location name to view the
-    // schedules."). Wait for the suggestion to render, then click it.
-    // getByText matches text nodes only, so it hits the dropdown entry and not
-    // the input (whose *value* is the country).
-    // Require :visible — plain getByText was resolving to an off-screen node, so
-    // the click timed out and nothing got selected. Note the UK is listed as
-    // "United Kingdom of Great Britain and Northern Ireland", so the configured
-    // name matches as a prefix.
-    // Confirmed from the live DOM: the dropdown is div[role="menu"] with class
-    // ui-dropdown__options, and every suggestion row is div.ui-option[role=
-    // "option"]. Typing the full country name puts the country itself first
-    // ("United Kingdom of Great Britain and N..."), so match on it and fall back
-    // to the first row.
+    // The dropdown auto-closes a few seconds after typing, so SELECT FIRST and
+    // run the diagnostics afterwards. The previous order (4s pause + two
+    // evaluates + a 2s "settle") burned the whole window — by the time we picked,
+    // the list was already gone (rows:0) and the click just dismissed it.
     const countryRe = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    // The row text lives in div.ui-option__content inside div.ui-option[role=
-    // "option"] (confirmed live). Try the text leaf, then the row, then the first
-    // row — and record the outcome so a silent miss can't hide again.
     const optionRows = page.locator('.ui-option[role="option"]');
     const optionTexts = page.locator(".ui-option__content");
-    await optionTexts.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
-    // Let the list settle first: it re-renders as the per-keystroke XHRs land,
-    // and clicking mid-render landed on empty space — the dropdown closed with
-    // nothing selected (rows fell to 0 while the trigger kept its placeholder).
-    await page.waitForTimeout(2000);
+    await optionTexts.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
 
     // The trigger shows the chosen location once a pick commits.
     const readTrigger = () =>
@@ -361,37 +318,45 @@ export async function setupSERankingBrowser(run, auth = {}) {
         .catch(() => "eval-failed");
     const committed = (t) => t && !/enter country/i.test(t) && t !== "no-trigger";
 
+    let picked = false;
     let pickErr = "";
-    // Keyboard first — immune to the re-render/click-position race. The input
-    // has focus, so ArrowDown highlights the first row (the country itself when
-    // the full name was typed) and Enter selects it.
-    await page.keyboard.press("ArrowDown").catch(() => {});
-    await page.waitForTimeout(500);
-    await page.keyboard.press("Enter").catch(() => {});
-    await page.waitForTimeout(1500);
-    let locAfter = await readTrigger();
-    let picked = committed(locAfter);
-
-    // Fallback: click the matching row.
-    if (!picked) {
-      const target = optionTexts.filter({ hasText: countryRe }).first();
-      if (await target.count().catch(() => 0)) {
-        try {
-          await target.click({ timeout: 6000 });
-        } catch (e) {
-          pickErr = String(e.message || "").slice(0, 50);
-        }
-        await page.waitForTimeout(1500);
-        const afterClick = await readTrigger();
-        locAfter = `${locAfter} -> afterClick:${afterClick}`;
-        picked = committed(afterClick);
+    // Click the matching row straight away, while the list is still open.
+    const target = optionTexts.filter({ hasText: countryRe }).first();
+    if (await target.count().catch(() => 0)) {
+      try {
+        await target.click({ timeout: 5000 });
+      } catch (e) {
+        pickErr = String(e.message || "").slice(0, 50);
       }
+      await page.waitForTimeout(1200);
+      picked = committed(await readTrigger());
     }
-    const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"} trigger:${locAfter}`;
+    // Fallback: keyboard selection (the input still holds focus).
     if (!picked) {
       await page.keyboard.press("ArrowDown").catch(() => {});
+      await page.waitForTimeout(300);
       await page.keyboard.press("Enter").catch(() => {});
+      await page.waitForTimeout(1200);
+      picked = committed(await readTrigger());
     }
+    const locAfter = await readTrigger();
+
+    // Diagnostics AFTER the attempt, so they can't eat the dropdown's lifetime.
+    const matchDiag = await page
+      .evaluate((c) => {
+        const out = [];
+        for (const el of document.querySelectorAll("*")) {
+          if (out.length >= 5) break;
+          const t = (el.textContent || "").trim();
+          if (t.includes(c) && el.children.length === 0 && el.getBoundingClientRect().width > 0) {
+            out.push(`${el.tagName}.${String(el.className || "").slice(0, 22)}|${t.slice(0, 38)}`);
+          }
+        }
+        return out.join(" ; ") || "no-visible-match";
+      }, country)
+      .catch(() => "eval-failed");
+    const typedDiag = await snapshot(page);
+    const pickDiag = `picked:${picked} rows:${await optionRows.count().catch(() => -1)} err:${pickErr || "-"} trigger:${locAfter}`;
     await page.waitForTimeout(2000);
 
     // Keywords (one per line).
