@@ -314,6 +314,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // a click that "succeeds" but leaves the field empty is the exact failure we
     // kept shipping, so nothing counts as selected until this text changes.
     const parentTrigger = page.getByText("Select parent project", { exact: false }).first();
+    const selectParent = async () => {
     try {
       await page.keyboard.press("Escape").catch(() => {});
       const respPromise = page
@@ -382,6 +383,8 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       await page.keyboard.press("Escape").catch(() => {});
       parentDiag = `error:${String(e.message || "").slice(0, 60)}`;
     }
+    };
+    await selectParent();
     await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
     await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
     await fillByPlaceholder(page, "Enter SERanking project ID", run.captured?.seRankingProjectId);
@@ -399,6 +402,19 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       const loading = await page.getByText(/loading\.\.\./i).first().isVisible().catch(() => false);
       if (!loading) break;
       await page.waitForTimeout(500);
+    }
+
+    // Second Parent attempt. The first runs while the page is still bootstrapping,
+    // which is a prime suspect for the empty Parent; by now everything has loaded,
+    // so retry before committing rather than saving a project without its group.
+    if (!/selected-via-/.test(parentDiag)) {
+      const firstDiag = parentDiag;
+      await selectParent();
+      parentDiag = /selected-via-/.test(parentDiag)
+        ? `${parentDiag} (retry; first=${firstDiag})`
+        : `${parentDiag} (retry also failed)`;
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(300);
     }
 
     // 4. Save. The submit button may read "Save changes" or "Create project".
