@@ -110,6 +110,23 @@ async function selectCountryAdvanced(page, country) {
   return "no-trigger";
 }
 
+// Select the desktop/mobile device toggle before adding a search engine. The
+// two device icons have no text, so try aria-label/title, then the phone SVG,
+// then the 2nd of the two device buttons sitting next to the engine tabs.
+async function selectDevice(page, kind /* "mobile" | "desktop" */) {
+  const byAria = page.locator(`[aria-label*="${kind}" i], [title*="${kind}" i]`).first();
+  if (await byAria.count().catch(() => 0)) {
+    if (await byAria.click({ timeout: 4000 }).then(() => true).catch(() => false)) return "aria";
+  }
+  const bySvg = page
+    .locator(`button:has(svg[class*="${kind}" i]), button:has([class*="${kind}" i])`)
+    .first();
+  if (await bySvg.count().catch(() => 0)) {
+    if (await bySvg.click({ timeout: 4000 }).then(() => true).catch(() => false)) return "svg";
+  }
+  return "not-found";
+}
+
 // Snapshot of the current wizard step for diagnostics when something fails.
 async function snapshot(page) {
   return page
@@ -329,7 +346,14 @@ export async function setupSERankingBrowser(run, auth = {}) {
     const country = MARKET_COUNTRY[run.market] || "United Kingdom";
     stepDiags.push(`country:${await selectCountryAdvanced(page, country)}`);
     await page.waitForTimeout(800);
-    stepDiags.push(`addEngine:${await clickButtonByText(page, /add search engine/i)}`);
+    // Add desktop first (the default device), then switch to mobile and add
+    // again — the operator wants mobile always tracked (casino ranking needs
+    // both). Device is a two-icon toggle next to the engine selector.
+    stepDiags.push(`addDesktop:${await clickButtonByText(page, /add search engine/i)}`);
+    await page.waitForTimeout(1500);
+    stepDiags.push(`mobile:${await selectDevice(page, "mobile")}`);
+    await page.waitForTimeout(500);
+    stepDiags.push(`addMobile:${await clickButtonByText(page, /add search engine/i)}`);
     await page.waitForTimeout(2000);
     stepDiags.push(`s2next:${await clickButtonByText(page, /next step|next|continue/i)}`);
     await page.waitForTimeout(2500);
