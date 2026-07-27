@@ -132,12 +132,15 @@ button.icon-button {
   font-weight: 750;
 }
 
-.brand strong,
-.brand span {
+/* Scope to the text block: .brand-mark is also a span in .brand, and these rules
+   are more specific than .brand-mark, so unscoped they knocked the logo's
+   display/color/font-size out and pushed "CS" outside its tile. */
+.brand > div strong,
+.brand > div span {
   display: block;
 }
 
-.brand span {
+.brand > div span {
   color: var(--muted);
   font-size: 13px;
 }
@@ -799,4 +802,30 @@ pre {
 }
 .se-session .muted {
   font-size: 12px;
+}
+
+/* Motion cue for a run in flight — without it a multi-minute run reads as frozen. */
+.spinner {
+  display: inline-block;
+  width: 0.72em;
+  height: 0.72em;
+  margin-right: 0.5em;
+  border: 2px solid rgba(37, 88, 214, 0.25);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: baseline;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.step-elapsed {
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
 }

@@ -77,7 +77,9 @@ const els = {
   runTitle: document.querySelector("#run-title"),
   runSubtitle: document.querySelector("#run-subtitle"),
   stepCount: document.querySelector("#step-count"),
-  currentStepTitle: document.querySelector("#current-step-title"),
+  currentStepTitle: document.querySelector("#current-step-text"),
+  stepSpinner: document.querySelector("#step-spinner"),
+  stepElapsed: document.querySelector("#step-elapsed"),
   currentStepMessage: document.querySelector("#current-step-message"),
   statusPill: document.querySelector("#status-pill"),
   progressText: document.querySelector("#progress-text"),
@@ -165,6 +167,20 @@ document.querySelector("#se-cookies-save")?.addEventListener("click", async () =
     msg.classList.remove("hidden");
   }
 });
+
+// Elapsed ticks on its own second, so the counter doesn't jump in 5s steps
+// between polls. state.elapsedFrom is null whenever nothing is running.
+function updateElapsed() {
+  if (!els.stepElapsed) return;
+  if (!state.elapsedFrom) {
+    els.stepElapsed.textContent = "";
+    return;
+  }
+  const secs = Math.max(0, Math.round((Date.now() - state.elapsedFrom) / 1000));
+  const mins = Math.floor(secs / 60);
+  els.stepElapsed.textContent = `Running for ${mins ? `${mins}m ` : ""}${secs % 60}s — usually 2–4 minutes. You can switch tabs; this one will tell you when it's done.`;
+}
+window.setInterval(updateElapsed, 1000);
 
 // Poll the runs so status changes (worker progress) show without a manual refresh.
 function startAutoRefresh() {
@@ -568,6 +584,13 @@ function renderAutomationStatus(run) {
       : step.text || note || automation.message || "";
   }
 
+  // Spinner + elapsed time: a run takes minutes, and with no motion on screen it
+  // reads as frozen. Elapsed also makes a genuinely stuck run obvious.
+  const running = !done && !blocked;
+  els.stepSpinner?.classList.toggle("hidden", !running);
+  state.elapsedFrom = running ? Date.parse(run.createdAt || run.updatedAt || "") || Date.now() : null;
+  updateElapsed();
+
   els.statusPill.textContent = statusLabel(status);
   els.statusPill.className = `pill ${statusClass(status)}`;
 
@@ -615,6 +638,61 @@ function renderDetail() {
   renderYamix(run);
   els.summary.textContent = summaryText(run);
   renderTabs();
+  reflectRunInTab(run);
+}
+
+// A run takes minutes while the operator works in other tabs (GA4/GSC), so the
+// tab itself reports state: title + favicon change, and finishing/blocking fires
+// a notification. Without this you have to keep checking the console by hand.
+const TAB_STATES = {
+  done: { mark: "✅", color: "#0a7a4a", label: "Done" },
+  needs_operator: { mark: "🟠", color: "#a86300", label: "Needs you" },
+  running: { mark: "⏳", color: "#2558d6", label: "Running" }
+};
+
+function setFavicon(color, mark) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <rect width="64" height="64" rx="14" fill="${color}"/>
+    <text x="32" y="45" font-size="34" text-anchor="middle">${mark}</text>
+  </svg>`;
+  let link = document.querySelector("link[rel='icon']");
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.type = "image/svg+xml";
+  link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function reflectRunInTab(run) {
+  const key = isRunDone(run) ? "done" : needsOperator(run) ? "needs_operator" : "running";
+  const s = TAB_STATES[key];
+  const stepPart = key === "done" ? "" : ` ${currentStepNumber(run)}/${stepMeta.length}`;
+  document.title = `${s.mark}${stepPart} ${run.projectName} — Connection setup`;
+  setFavicon(s.color, s.mark);
+
+  // Notify only on a real transition, so polling every 5s doesn't spam.
+  const prev = state.tabStateByRun?.[run.id];
+  if (!state.tabStateByRun) state.tabStateByRun = {};
+  state.tabStateByRun[run.id] = key;
+  if (prev && prev !== key && (key === "done" || key === "needs_operator")) {
+    notify(
+      key === "done" ? `${run.projectName}: all done` : `${run.projectName}: needs you`,
+      key === "done"
+        ? "SE Ranking and Yamix projects created."
+        : "The automation is waiting for a manual step."
+    );
+  }
+}
+
+function notify(title, body) {
+  try {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    new Notification(title, { body, icon: "/favicon.svg" });
+  } catch {
+    /* notifications are a nicety, never break the UI over them */
+  }
 }
 
 function renderTabs() {
@@ -826,6 +904,15 @@ els.form.addEventListener("submit", async (event) => {
     return;
   }
   setFormError("");
+  // Ask here, on a real click — browsers reject permission prompts on page load,
+  // and this is the moment the operator actually wants to be told when it ends.
+  try {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  } catch {
+    /* ignore */
+  }
   const payload = {
     siteUrl: raw.siteUrl,
     targetMarket: raw.targetMarket,

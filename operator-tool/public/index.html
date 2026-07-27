@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Connection setup Operator 2026</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -113,10 +114,11 @@
             <span id="status-pill" class="pill"></span>
           </div>
 
-          <div class="current-step-card">
+          <div id="current-step-card" class="current-step-card">
             <span id="step-count" class="step-count"></span>
-            <h2 id="current-step-title"></h2>
+            <h2 id="current-step-title"><span id="step-spinner" class="spinner hidden" aria-hidden="true"></span><span id="current-step-text"></span></h2>
             <p id="current-step-message"></p>
+            <p id="step-elapsed" class="muted step-elapsed"></p>
           </div>
 
           <div class="progress-wrap compact-progress">
