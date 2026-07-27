@@ -178,14 +178,21 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // Record failed network responses so we can see if a data fetch (e.g. the
     // Parent project groups) is erroring in the automation session.
     const failedRequests = [];
+    // Also track the parent-groups XHR (project-groups?page=...&search=) so we
+    // can tell whether it fires/succeeds in the headless session — that's why
+    // the Parent dropdown sometimes stays "Loading...".
+    const groupRequests = [];
     page.on("response", (resp) => {
       try {
-        if (resp.status() >= 400) failedRequests.push(`${resp.status()} ${resp.url().replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
+        const u = resp.url();
+        if (/project-groups/i.test(u)) groupRequests.push(`${resp.status()}`);
+        if (resp.status() >= 400) failedRequests.push(`${resp.status()} ${u.replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
       } catch {
         /* ignore */
       }
     });
     page._failedRequests = failedRequests;
+    page._groupRequests = groupRequests;
 
     // 1. Login at the canonical sign-in page. Wait for the form to render before
     // filling (going to the root races a redirect to /auth/sign-in). Confirmed DOM:
@@ -287,11 +294,34 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       ],
       run.projectName
     );
-    // Parent project is optional AND its groups never load in this session —
-    // opening it puts the combo in a "Loading..." state that BLOCKS the save.
-    // So skip it entirely (Denis sets Parent manually for now); this keeps the
-    // form submittable. Re-enable once the parent-groups fetch works headless.
-    const parentDiag = "skipped (set manually)";
+    // Parent: open the dropdown (which triggers the project-groups XHR), wait
+    // for that exact response, then pick SKY Rocket from the loaded list. If the
+    // groups don't render, close it so the save isn't blocked. The groups:<status>
+    // diagnostic tells us whether the XHR fires/succeeds headless.
+    let parentDiag = "";
+    const parentName = run.defaults?.yamixParentProject || "SKY Rocket";
+    try {
+      await page.keyboard.press("Escape").catch(() => {});
+      const respPromise = page
+        .waitForResponse((r) => /project-groups/i.test(r.url()), { timeout: 12000 })
+        .catch(() => null);
+      const combo = page.getByText("Select parent project", { exact: false }).first();
+      await combo.click({ timeout: 6000 }).catch(() => {});
+      const resp = await respPromise;
+      const groupStatus = resp ? String(resp.status()) : "no-request";
+      const target = page.getByText(parentName, { exact: false }).first();
+      const appeared = await target.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+      if (appeared) {
+        await target.click({ timeout: 5000 }).catch(() => {});
+        parentDiag = `groups:${groupStatus} selected`;
+      } else {
+        await page.keyboard.press("Escape").catch(() => {});
+        parentDiag = `groups:${groupStatus} not-rendered`;
+      }
+    } catch (e) {
+      await page.keyboard.press("Escape").catch(() => {});
+      parentDiag = `error:${String(e.message || "").slice(0, 40)}`;
+    }
     await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
     await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
     await fillByPlaceholder(page, "Enter SERanking project ID", run.captured?.seRankingProjectId);
@@ -380,6 +410,8 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
         .catch((e) => `diag-error: ${e.message}`);
       const failed = (page._failedRequests || []).slice(-6);
       if (failed.length) blockDiag += ` failedRequests: ${failed.join(" ; ")}`;
+      const groups = page._groupRequests || [];
+      blockDiag += ` parentGroupsXHR: ${groups.length ? groups.join(",") : "none"} parent:${parentDiag}`;
     }
     const lastUrl = page.url();
 
