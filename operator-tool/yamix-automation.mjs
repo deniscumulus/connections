@@ -305,19 +305,33 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       const respPromise = page
         .waitForResponse((r) => /project-groups/i.test(r.url()), { timeout: 12000 })
         .catch(() => null);
+      // Open the dropdown.
       const combo = page.getByText("Select parent project", { exact: false }).first();
       await combo.click({ timeout: 6000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      // Type into the "Search project groups..." box — that reliably fires the
+      // project-groups XHR (opening alone sometimes didn't) and filters the list.
+      const search = page.getByPlaceholder(/search project group/i).first();
+      let typed = false;
+      if (await search.count().catch(() => 0)) {
+        await search.click().catch(() => {});
+        await search.pressSequentially(parentName, { delay: 60 }).catch(() => {});
+        typed = true;
+      }
       const resp = await respPromise;
       const groupStatus = resp ? String(resp.status()) : "no-request";
-      const target = page.getByText(parentName, { exact: false }).first();
-      const appeared = await target.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
-      if (appeared) {
-        await target.click({ timeout: 5000 }).catch(() => {});
-        parentDiag = `groups:${groupStatus} selected`;
+      await page.waitForTimeout(1500);
+      // Click the matching option (text nodes only, so we hit the row not input).
+      const nameRe = new RegExp(parentName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      const option = page.locator(`:text("${parentName}"):visible`).first();
+      const appeared = await option.waitFor({ state: "visible", timeout: 6000 }).then(() => true).catch(() => false);
+      if (appeared && (await option.click({ timeout: 5000 }).then(() => true).catch(() => false))) {
+        parentDiag = `groups:${groupStatus} typed:${typed} selected`;
       } else {
         await page.keyboard.press("Escape").catch(() => {});
-        parentDiag = `groups:${groupStatus} not-rendered`;
+        parentDiag = `groups:${groupStatus} typed:${typed} not-rendered`;
       }
+      void nameRe;
     } catch (e) {
       await page.keyboard.press("Escape").catch(() => {});
       parentDiag = `error:${String(e.message || "").slice(0, 40)}`;

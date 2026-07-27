@@ -549,8 +549,17 @@ function renderAutomationStatus(run) {
   if (done) {
     els.stepCount.textContent = `${stepMeta.length}/${stepMeta.length} done`;
     els.currentStepTitle.textContent = "All done";
+    const yamixNote = run.steps?.yamix?.note || "";
+    const pm = yamixNote.match(/parent:\s*([^\n]*)/i);
+    let parentLine = "";
+    if (pm) {
+      const raw = pm[1];
+      parentLine = /\bselected\b/i.test(raw)
+        ? " Yamix parent: selected ✓"
+        : ` Yamix parent: NOT selected (${raw.trim()})`;
+    }
     els.currentStepMessage.textContent =
-      "SE Ranking and Yamix projects created. The run is complete.";
+      "SE Ranking and Yamix projects created. The run is complete." + parentLine;
   } else {
     els.stepCount.textContent = `Step ${currentStepNumber(run)}/${stepMeta.length}`;
     els.currentStepTitle.textContent = step.title;
