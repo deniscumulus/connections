@@ -80,6 +80,14 @@
         <button class="primary" type="submit">Create Run & Start</button>
       </form>
 
+      <details id="se-session" class="se-session">
+        <summary>SE Ranking session <span id="se-session-status" class="muted"></span></summary>
+        <p class="muted">When a run says "session expired": log in to SE Ranking (with "keep me logged in"), export cookies with the Cookie-Editor extension (Export as JSON), paste them below, and Save. No terminal or redeploy needed.</p>
+        <textarea id="se-cookies-input" rows="4" placeholder='Paste the Cookie-Editor JSON here (starts with [{"domain":".seranking.com"...)'></textarea>
+        <div id="se-session-msg" class="form-error hidden"></div>
+        <button id="se-cookies-save" type="button" class="primary">Save session</button>
+      </details>
+
       <div class="run-list-head">
         <h2>Runs</h2>
         <button id="refresh-runs" type="button" class="icon-button" title="Refresh runs">Refresh</button>

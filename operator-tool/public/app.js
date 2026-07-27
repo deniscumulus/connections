@@ -127,7 +127,44 @@ async function showApp() {
   els.appShell?.classList.remove("hidden");
   await loadRuns();
   startAutoRefresh();
+  loadSeSessionStatus();
 }
+
+// --- SE Ranking session (cookies pasted through the UI) ---
+async function loadSeSessionStatus() {
+  const statusEl = document.querySelector("#se-session-status");
+  if (!statusEl) return;
+  try {
+    const meta = await api("/api/seranking-cookies?meta=1");
+    statusEl.textContent = meta.savedAt
+      ? `— ${meta.count} cookies, updated ${new Date(meta.savedAt).toLocaleString()}`
+      : "— not set";
+  } catch {
+    statusEl.textContent = "";
+  }
+}
+
+document.querySelector("#se-cookies-save")?.addEventListener("click", async () => {
+  const input = document.querySelector("#se-cookies-input");
+  const msg = document.querySelector("#se-session-msg");
+  const raw = String(input?.value || "").trim();
+  msg.classList.add("hidden");
+  if (!raw) {
+    msg.textContent = "Paste the Cookie-Editor JSON first.";
+    msg.classList.remove("hidden");
+    return;
+  }
+  try {
+    const result = await api("/api/seranking-cookies", { method: "POST", body: JSON.stringify({ cookies: raw }) });
+    input.value = "";
+    msg.textContent = `Saved ${result.count} cookies. New runs will use this session.`;
+    msg.classList.remove("hidden");
+    loadSeSessionStatus();
+  } catch (error) {
+    msg.textContent = error.message || "Could not save the session.";
+    msg.classList.remove("hidden");
+  }
+});
 
 // Poll the runs so status changes (worker progress) show without a manual refresh.
 function startAutoRefresh() {

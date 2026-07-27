@@ -777,3 +777,26 @@ pre {
     justify-content: flex-start;
   }
 }
+
+/* SE Ranking session (paste cookies to refresh the browser session) */
+.se-session {
+  margin: 12px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.se-session summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.se-session textarea {
+  width: 100%;
+  margin: 8px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+.se-session .muted {
+  font-size: 12px;
+}

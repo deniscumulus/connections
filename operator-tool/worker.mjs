@@ -252,11 +252,20 @@ async function handleStepAutomation(run, stepKey) {
     // login isn't configured. The browser module is imported dynamically here so
     // any problem with it can't crash the worker on startup (stalling the queue).
     let result;
-    if (credentials.seRankingCookies || (credentials.seRankingEmail && credentials.seRankingPassword)) {
+    // Prefer cookies pasted through the UI (stored server-side, refreshable
+    // without a redeploy); fall back to the SERANKING_COOKIES_B64 env secret.
+    let cookiesJson = credentials.seRankingCookies;
+    try {
+      const uiCookies = await api("/api/seranking-cookies");
+      if (Array.isArray(uiCookies) && uiCookies.length) cookiesJson = JSON.stringify(uiCookies);
+    } catch {
+      /* fall back to env cookies */
+    }
+    if (cookiesJson || (credentials.seRankingEmail && credentials.seRankingPassword)) {
       try {
         const { setupSERankingBrowser } = await import("./seranking-browser.mjs");
         result = await setupSERankingBrowser(run, {
-          cookiesJson: credentials.seRankingCookies,
+          cookiesJson,
           email: credentials.seRankingEmail,
           password: credentials.seRankingPassword
         });

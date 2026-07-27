@@ -9,6 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
 const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
 const runsFile = path.join(dataDir, "runs.json");
+// SE Ranking session cookies, pasted through the UI so the browser automation
+// can run as the operator without re-doing base64/GitHub-secret/deploy each time
+// the session expires.
+const cookiesFile = path.join(dataDir, "seranking-cookies.json");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
 const basicAuthUser = process.env.BASIC_AUTH_USER || "";
@@ -456,6 +460,49 @@ async function handleApi(req, res, url) {
     const runs = await readRuns();
     sendJson(res, 200, runs);
     return;
+  }
+
+  // SE Ranking session cookies. GET returns them (the worker fetches this);
+  // POST stores the raw Cookie-Editor JSON pasted in the UI.
+  if (url.pathname === "/api/seranking-cookies") {
+    if (req.method === "GET") {
+      let stored = null;
+      try {
+        stored = JSON.parse(await readFile(cookiesFile, "utf8"));
+      } catch {
+        stored = null;
+      }
+      const cookies = Array.isArray(stored?.cookies) ? stored.cookies : [];
+      // ?meta=1 -> status only (so cookies aren't shipped to the browser page).
+      if (url.searchParams.get("meta")) {
+        sendJson(res, 200, { count: cookies.length, savedAt: stored?.savedAt || null });
+        return;
+      }
+      sendJson(res, 200, cookies);
+      return;
+    }
+    if (req.method === "POST") {
+      const body = await readBody(req);
+      // Accept either the raw array, {cookies:[...]}, or a JSON string.
+      let raw = body?.cookies ?? body;
+      if (typeof raw === "string") {
+        try {
+          raw = JSON.parse(raw);
+        } catch {
+          sendJson(res, 400, { error: "Not valid JSON. Paste the Cookie-Editor 'Export as JSON' output." });
+          return;
+        }
+      }
+      const arr = Array.isArray(raw) ? raw : raw?.cookies;
+      if (!Array.isArray(arr) || !arr.length) {
+        sendJson(res, 400, { error: "Expected a non-empty array of cookies." });
+        return;
+      }
+      const savedAt = new Date().toISOString();
+      await writeFile(cookiesFile, `${JSON.stringify({ savedAt, cookies: arr }, null, 2)}\n`, "utf8");
+      sendJson(res, 200, { count: arr.length, savedAt });
+      return;
+    }
   }
 
   if (req.method === "GET" && url.pathname === "/api/runs/next-queued") {
