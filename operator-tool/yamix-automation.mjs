@@ -287,14 +287,11 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       ],
       run.projectName
     );
-    // Parent project is optional (no red *), so don't fail the run if it's
-    // missing — but record the reason so we can see why it didn't select.
-    const parentDiag = await selectDropdown(
-      page,
-      "Select parent project",
-      run.defaults?.yamixParentProject || "SKY Rocket",
-      { required: false }
-    );
+    // Parent project is optional AND its groups never load in this session —
+    // opening it puts the combo in a "Loading..." state that BLOCKS the save.
+    // So skip it entirely (Denis sets Parent manually for now); this keeps the
+    // form submittable. Re-enable once the parent-groups fetch works headless.
+    const parentDiag = "skipped (set manually)";
     await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
     await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
     await fillByPlaceholder(page, "Enter SERanking project ID", run.captured?.seRankingProjectId);
