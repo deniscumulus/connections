@@ -626,7 +626,12 @@ function renderDetail() {
   els.runSubtitle.textContent = `${run.siteUrl} | ${run.targetMarket || run.market || "No target market"}`;
 
   const progress = progressFor(run);
-  els.progressText.textContent = `${progress.percent}% complete`;
+  // "Step 2/2" (working on step 2) next to "50% complete" (1 of 2 finished) read
+  // as a contradiction. Say what the number counts instead of a bare percentage.
+  els.progressText.textContent =
+    progress.done === progress.total
+      ? `All ${progress.total} steps done`
+      : `${progress.done} of ${progress.total} steps done`;
   els.updatedText.textContent = `Updated ${new Date(run.updatedAt).toLocaleString()}`;
   els.progressBar.style.width = `${progress.percent}%`;
 

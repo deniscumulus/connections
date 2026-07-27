@@ -365,7 +365,10 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
         if (await isSelected()) how = "click";
       }
       // Strategy 2: keyboard — custom comboboxes often only commit on Enter.
-      if (!how) {
+      // ONLY when the popup actually opened: with no popup, focus is still on the
+      // form and Enter SUBMITS it half-filled (this silently wrecked "Github FR").
+      const popupOpen = popupText && !/^(no-popup|eval-failed)$/.test(popupText);
+      if (!how && popupOpen) {
         await page.keyboard.press("ArrowDown").catch(() => {});
         await page.waitForTimeout(300);
         await page.keyboard.press("Enter").catch(() => {});
@@ -377,7 +380,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
         parentDiag = `groups:${groupStatus} typed:${typed} selected-via-${how}`;
       } else {
         await page.keyboard.press("Escape").catch(() => {});
-        parentDiag = `groups:${groupStatus} typed:${typed} NOT-selected popup="${popupText}"`;
+        parentDiag = `groups:${groupStatus} typed:${typed} NOT-selected popup="${popupText}"${popupOpen ? "" : " (no popup; skipped Enter)"}`;
       }
     } catch (e) {
       await page.keyboard.press("Escape").catch(() => {});
