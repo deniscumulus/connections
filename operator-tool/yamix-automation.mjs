@@ -182,10 +182,19 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // can tell whether it fires/succeeds in the headless session — that's why
     // the Parent dropdown sometimes stays "Loading...".
     const groupRequests = [];
+    const groupBodies = [];
     page.on("response", (resp) => {
       try {
         const u = resp.url();
-        if (/project-groups/i.test(u)) groupRequests.push(`${resp.status()}`);
+        if (/project-groups/i.test(u)) {
+          groupRequests.push(`${resp.status()}`);
+          // Capture the payload: tells us whether SKY Rocket even reaches this
+          // session, which separates "API withheld it" from "UI failed to render".
+          resp
+            .text()
+            .then((t) => groupBodies.push(String(t).slice(0, 300)))
+            .catch(() => {});
+        }
         if (resp.status() >= 400) failedRequests.push(`${resp.status()} ${u.replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
       } catch {
         /* ignore */
@@ -193,6 +202,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     });
     page._failedRequests = failedRequests;
     page._groupRequests = groupRequests;
+    page._groupBodies = groupBodies;
 
     // 1. Login at the canonical sign-in page. Wait for the form to render before
     // filling (going to the root races a redirect to /auth/sign-in). Confirmed DOM:
@@ -300,17 +310,18 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // diagnostic tells us whether the XHR fires/succeeds headless.
     let parentDiag = "";
     const parentName = run.defaults?.yamixParentProject || "SKY Rocket";
+    // The trigger element whose text we read back to VERIFY the pick committed —
+    // a click that "succeeds" but leaves the field empty is the exact failure we
+    // kept shipping, so nothing counts as selected until this text changes.
+    const parentTrigger = page.getByText("Select parent project", { exact: false }).first();
     try {
       await page.keyboard.press("Escape").catch(() => {});
       const respPromise = page
         .waitForResponse((r) => /project-groups/i.test(r.url()), { timeout: 12000 })
         .catch(() => null);
-      // Open the dropdown.
-      const combo = page.getByText("Select parent project", { exact: false }).first();
-      await combo.click({ timeout: 6000 }).catch(() => {});
-      await page.waitForTimeout(500);
-      // Type into the "Search project groups..." box — that reliably fires the
-      // project-groups XHR (opening alone sometimes didn't) and filters the list.
+      await parentTrigger.click({ timeout: 6000 }).catch(() => {});
+      await page.waitForTimeout(800);
+
       const search = page.getByPlaceholder(/search project group/i).first();
       let typed = false;
       if (await search.count().catch(() => 0)) {
@@ -320,21 +331,56 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       }
       const resp = await respPromise;
       const groupStatus = resp ? String(resp.status()) : "no-request";
-      await page.waitForTimeout(1500);
-      // Click the matching option (text nodes only, so we hit the row not input).
-      const nameRe = new RegExp(parentName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      const option = page.locator(`:text("${parentName}"):visible`).first();
-      const appeared = await option.waitFor({ state: "visible", timeout: 6000 }).then(() => true).catch(() => false);
-      if (appeared && (await option.click({ timeout: 5000 }).then(() => true).catch(() => false))) {
-        parentDiag = `groups:${groupStatus} typed:${typed} selected`;
+      await page.waitForTimeout(2000);
+
+      // Ground truth: dump what the open popup actually renders. This is what
+      // tells us whether we're fighting an empty list or a bad click target.
+      const popupText = await page
+        .evaluate(() => {
+          const hit = [...document.querySelectorAll("body *")].filter((el) => {
+            const s = getComputedStyle(el);
+            if (s.display === "none" || s.visibility === "hidden") return false;
+            const p = s.position;
+            return (p === "absolute" || p === "fixed") && el.offsetHeight > 40 && el.offsetHeight < 600;
+          });
+          const box = hit.sort((a, b) => b.offsetHeight - a.offsetHeight)[0];
+          return box ? (box.innerText || "").replace(/\s+/g, " ").slice(0, 200) : "no-popup";
+        })
+        .catch(() => "eval-failed");
+
+      const isSelected = async () =>
+        (await parentTrigger.count().catch(() => 0)) === 0 ||
+        !/select parent project/i.test(((await parentTrigger.textContent().catch(() => "")) || ""));
+
+      // Strategy 1: click the option row.
+      let how = "";
+      const option = page
+        .locator(`li, [role="option"], [class*="option"], [class*="item"]`)
+        .filter({ hasText: new RegExp(parentName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") })
+        .first();
+      if (await option.count().catch(() => 0)) {
+        await option.click({ timeout: 4000 }).catch(() => {});
+        await page.waitForTimeout(700);
+        if (await isSelected()) how = "click";
+      }
+      // Strategy 2: keyboard — custom comboboxes often only commit on Enter.
+      if (!how) {
+        await page.keyboard.press("ArrowDown").catch(() => {});
+        await page.waitForTimeout(300);
+        await page.keyboard.press("Enter").catch(() => {});
+        await page.waitForTimeout(700);
+        if (await isSelected()) how = "keyboard";
+      }
+
+      if (how) {
+        parentDiag = `groups:${groupStatus} typed:${typed} selected-via-${how}`;
       } else {
         await page.keyboard.press("Escape").catch(() => {});
-        parentDiag = `groups:${groupStatus} typed:${typed} not-rendered`;
+        parentDiag = `groups:${groupStatus} typed:${typed} NOT-selected popup="${popupText}"`;
       }
-      void nameRe;
     } catch (e) {
       await page.keyboard.press("Escape").catch(() => {});
-      parentDiag = `error:${String(e.message || "").slice(0, 40)}`;
+      parentDiag = `error:${String(e.message || "").slice(0, 60)}`;
     }
     await fillByPlaceholder(page, "Enter GSC dataset name", run.generated?.gscDatasetName);
     await fillByPlaceholder(page, "Enter GA4 dataset name", run.generated?.ga4DatasetName);
@@ -494,10 +540,15 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       // project-groups fetch is erroring in the automation session.
       const failed = (page._failedRequests || []).slice(-5);
       const failedNote = parentDiag && failed.length ? ` [failed: ${failed.join(" ; ")}]` : "";
+      // When Parent didn't take, attach the raw project-groups payload — it shows
+      // whether SKY Rocket was ever sent to this session.
+      const bodyNote = /NOT-selected|no-request/.test(parentDiag)
+        ? ` groupsBody=${(page._groupBodies || []).slice(-1)[0] || "none"}`
+        : "";
       return {
         success: true,
         yamixUpdated: created,
-        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.${parentDiag ? ` Parent: ${parentDiag}` : " Parent: SKY Rocket selected."}${failedNote}`
+        message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.${parentDiag ? ` Parent: ${parentDiag}` : " Parent: SKY Rocket selected."}${bodyNote}${failedNote}`
       };
     }
 

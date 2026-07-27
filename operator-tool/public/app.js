@@ -554,9 +554,9 @@ function renderAutomationStatus(run) {
     let parentLine = "";
     if (pm) {
       const raw = pm[1];
-      parentLine = /\bselected\b/i.test(raw)
-        ? " Yamix parent: selected ✓"
-        : ` Yamix parent: NOT selected (${raw.trim()})`;
+      parentLine = /selected-via-/i.test(raw)
+        ? " — Yamix parent: selected ✓"
+        : ` — Yamix parent NOT selected → ${raw.trim()}`;
     }
     els.currentStepMessage.textContent =
       "SE Ranking and Yamix projects created. The run is complete." + parentLine;
