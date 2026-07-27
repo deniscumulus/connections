@@ -82,7 +82,6 @@ const els = {
   stepElapsed: document.querySelector("#step-elapsed"),
   currentStepMessage: document.querySelector("#current-step-message"),
   statusPill: document.querySelector("#status-pill"),
-  progressText: document.querySelector("#progress-text"),
   updatedText: document.querySelector("#updated-text"),
   progressBar: document.querySelector("#progress-bar"),
   operatorIntervention: document.querySelector("#operator-intervention"),
@@ -625,13 +624,9 @@ function renderDetail() {
   els.runTitle.textContent = run.projectName;
   els.runSubtitle.textContent = `${run.siteUrl} | ${run.targetMarket || run.market || "No target market"}`;
 
+  // Step position is shown once, on the step card ("Step 1/2"). A second count
+  // here only ever contradicted it, so the bar carries progress on its own.
   const progress = progressFor(run);
-  // "Step 2/2" (working on step 2) next to "50% complete" (1 of 2 finished) read
-  // as a contradiction. Say what the number counts instead of a bare percentage.
-  els.progressText.textContent =
-    progress.done === progress.total
-      ? `All ${progress.total} steps done`
-      : `${progress.done} of ${progress.total} steps done`;
   els.updatedText.textContent = `Updated ${new Date(run.updatedAt).toLocaleString()}`;
   els.progressBar.style.width = `${progress.percent}%`;
 
