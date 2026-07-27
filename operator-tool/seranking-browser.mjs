@@ -82,32 +82,47 @@ async function toggleAdvanced(page) {
 
 // Country in advanced mode: try a native <select> first, then a custom dropdown.
 async function selectCountryAdvanced(page, country) {
+  const re = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+
+  // Native <select> path (in case the field is a real select somewhere).
   const selects = page.locator("select");
   const n = await selects.count().catch(() => 0);
   for (let i = 0; i < n; i += 1) {
     try {
-      await selects.nth(i).selectOption({ label: country }, { timeout: 3000 });
+      await selects.nth(i).selectOption({ label: country }, { timeout: 2000 });
       return "select";
     } catch {
       /* not this one */
     }
   }
-  const re = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-  const trigger = page
-    .locator('[role="combobox"], [class*="select-trigger" i], [class*="select" i], button')
-    .filter({ hasText: /country|united states|choose|select/i })
+
+  // Custom dropdown (confirmed live): the control right after the "Country"
+  // label opens a "Search country" box + a list of ui-option rows. Open it, type
+  // the country, click the matching row, and verify the trigger updated.
+  const label = page.getByText("Country", { exact: true }).first();
+  const trigger = label
+    .locator('xpath=following::*[contains(@class,"select-trigger") or @role="combobox" or @role="button"][1]')
     .first();
-  if (await trigger.count().catch(() => 0)) {
-    await trigger.click({ timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(1000);
-    const opt = page.locator('.ui-option, [role="option"], li').filter({ hasText: re }).first();
-    if (await opt.count().catch(() => 0)) {
-      await opt.click({ timeout: 5000 }).catch(() => {});
-      return "custom";
-    }
-    return "opened-no-option";
+  if (!(await trigger.count().catch(() => 0))) return "no-trigger";
+  await trigger.click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(800);
+
+  const search = page.getByPlaceholder(/search country/i).first();
+  if (await search.count().catch(() => 0)) {
+    await search.click().catch(() => {});
+    await search.pressSequentially(country, { delay: 60 }).catch(() => {});
+    await page.waitForTimeout(1500);
   }
-  return "no-trigger";
+
+  const opt = page.locator('.ui-option, [role="option"], li').filter({ hasText: re }).first();
+  await opt.waitFor({ state: "visible", timeout: 6000 }).catch(() => {});
+  if (await opt.count().catch(() => 0)) {
+    await opt.click({ timeout: 5000 }).catch(() => {});
+  }
+  await page.waitForTimeout(800);
+
+  const now = ((await trigger.textContent().catch(() => "")) || "").trim();
+  return re.test(now) ? "ok" : `left:${now.slice(0, 20) || "?"}`;
 }
 
 // Select the desktop/mobile device toggle before adding a search engine. The
