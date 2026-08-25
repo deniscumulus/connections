@@ -183,6 +183,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
     // the Parent dropdown sometimes stays "Loading...".
     const groupRequests = [];
     const groupBodies = [];
+    const saveErrors = [];
     page.on("response", (resp) => {
       try {
         const u = resp.url();
@@ -195,12 +196,25 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
             .then((t) => groupBodies.push(String(t).slice(0, 300)))
             .catch(() => {});
         }
-        if (resp.status() >= 400) failedRequests.push(`${resp.status()} ${u.replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`);
+        if (resp.status() >= 400) {
+          const line = `${resp.status()} ${u.replace(/^https?:\/\/[^/]+/, "").slice(0, 70)}`;
+          failedRequests.push(line);
+          // The save POST failing 500 is Yamix's own server erroring; its body
+          // carries the actual reason (constraint, validation, stack), which the
+          // UI never shows. Without it "unclear outcome" is all we can report.
+          if (/\/api\/projects/i.test(u)) {
+            resp
+              .text()
+              .then((t) => saveErrors.push(`${resp.status()} ${String(t).replace(/\s+/g, " ").slice(0, 300)}`))
+              .catch(() => {});
+          }
+        }
       } catch {
         /* ignore */
       }
     });
     page._failedRequests = failedRequests;
+    page._saveErrors = saveErrors;
     page._groupRequests = groupRequests;
     page._groupBodies = groupBodies;
 
@@ -568,6 +582,18 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
         success: true,
         yamixUpdated: created,
         message: `Yamix project "${run.projectName}" created${created ? " and verified in the list" : ""}.${parentDiag ? ` Parent: ${parentDiag}` : " Parent: SKY Rocket selected."}${bodyNote}${failedNote}`
+      };
+    }
+
+    // A failing save POST is a Yamix-side error, not a form problem — say so
+    // plainly instead of "outcome unclear", which sends the operator hunting
+    // through a form that was actually filled correctly.
+    const saveError = (page._saveErrors || []).slice(-1)[0] || "";
+    if (saveError) {
+      return {
+        success: false,
+        needsOperator: true,
+        error: `Yamix's own server rejected the save for "${run.projectName}" — POST /api/projects returned ${saveError}. The form was filled correctly (nothing to fix on our side); retry, and if it keeps failing this is one for the Yamix admins.${blockDiag ? ` Diagnostic: ${blockDiag}.` : ""}`
       };
     }
 
