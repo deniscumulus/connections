@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create .env file with secrets
+          - name: Create .env file with secrets
         env:
           GPASS: ${{ secrets.GPASS }}
           WPMAIL: ${{ secrets.WPMAIL }}
@@ -23,6 +23,8 @@ jobs:
           SEPASS: ${{ secrets.SEPASS }}
           SERANKING_API_KEY: ${{ secrets.SERANKING_API_KEY }}
           SECOOKIES: ${{ secrets.SERANKING_COOKIES_B64 }}
+          DMCAUSER: ${{ secrets.DMCAUSER }}
+          DMCAPASS: ${{ secrets.DMCAPASS }}
         run: |
           b64() { printf '%s' "$1" | base64 -w0; }
           {
@@ -35,6 +37,9 @@ jobs:
             echo "SERANKING_PASSWORD_B64=$(b64 "$SEPASS")"
             echo "SERANKING_API_KEY=$SERANKING_API_KEY"
             echo "SERANKING_COOKIES_B64=$(printf '%s' "$SECOOKIES" | tr -d '\n\r')"
+            echo "DMCA_BASE_URL=https://dmca.bestonlinecasinodownload.com"
+            echo "DMCA_USER=$DMCAUSER"
+            echo "DMCA_PASSWORD_B64=$(b64 "$DMCAPASS")"
           } > operator-tool/.env
 
       - name: Sync Files to OVH VPS
