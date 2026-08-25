@@ -573,8 +573,18 @@ function renderAutomationStatus(run) {
         ? " — Yamix parent: selected ✓"
         : ` — Yamix parent NOT selected → ${raw.trim()}`;
     }
+    // The DMCA portfolio sync is non-blocking, so a failure would otherwise be
+    // invisible on a "done" run — surface it here where it gets noticed.
+    const finalNote = run.steps?.finalCheck?.note || "";
+    const dm = finalNote.match(/DMCA portfolio:\s*([^]*)$/i);
+    let dmcaLine = "";
+    if (dm) {
+      dmcaLine = /NOT added/i.test(dm[1])
+        ? ` — DMCA portfolio NOT added: ${dm[1].replace(/^NOT added — /i, "").trim()}`
+        : ` — DMCA portfolio: ${dm[1].trim()}`;
+    }
     els.currentStepMessage.textContent =
-      "SE Ranking and Yamix projects created. The run is complete." + parentLine;
+      "SE Ranking and Yamix projects created. The run is complete." + parentLine + dmcaLine;
   } else {
     els.stepCount.textContent = `Step ${currentStepNumber(run)}/${stepMeta.length}`;
     els.currentStepTitle.textContent = step.title;

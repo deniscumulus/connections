@@ -35,7 +35,11 @@ const credentials = {
   // Logged-in sub-account session (Cookie-Editor JSON, base64). Preferred over
   // email/password: SE Ranking's login has a visible reCAPTCHA, and only a
   // sub-account session creates projects where Denis can actually see them.
-  seRankingCookies: fromB64(process.env.SERANKING_COOKIES_B64) || ""
+  seRankingCookies: fromB64(process.env.SERANKING_COOKIES_B64) || "",
+  // DMCA claims tool — every onboarded site is added to its monitored portfolio.
+  dmcaBaseUrl: process.env.DMCA_BASE_URL || "",
+  dmcaUser: process.env.DMCA_USER || "",
+  dmcaPassword: fromB64(process.env.DMCA_PASSWORD_B64) || process.env.DMCA_PASSWORD || ""
 };
 
 // Manual before the run: create the Google account and connect the site to GA4 +
@@ -362,13 +366,43 @@ async function handleStepAutomation(run, stepKey) {
   if (stepKey === "finalCheck") {
     console.log(`[worker] final check for run ${run.id}`);
 
-    // All work (including Yamix project creation) is done in the earlier steps.
-    // Final check just marks the run complete.
+    // Register the site in the DMCA claims tool's portfolio so it gets monitored
+    // for copyright claims. Deliberately NON-BLOCKING: SE Ranking and Yamix have
+    // already succeeded by now, and a hiccup in a secondary system must not hold
+    // a finished onboarding hostage. A failure is reported in the note instead,
+    // so the operator can add the domain by hand.
+    let dmca = { ok: false, skipped: true, message: "" };
+    try {
+      const { addDomainToDmcaPortfolio } = await import("./dmca-portfolio.mjs");
+      dmca = await addDomainToDmcaPortfolio(run.siteUrl || run.hostname, {
+        baseUrl: credentials.dmcaBaseUrl,
+        user: credentials.dmcaUser,
+        password: credentials.dmcaPassword
+      });
+    } catch (error) {
+      dmca = { ok: false, message: `DMCA portfolio sync failed: ${error.message}` };
+    }
+    console.log(`[worker] run ${run.id} DMCA portfolio: ${dmca.message}`);
+
+    const dmcaNote = dmca.ok
+      ? ` DMCA portfolio: ${dmca.domain} added.`
+      : dmca.skipped
+      ? ""
+      : ` DMCA portfolio: NOT added — ${dmca.message} Add the domain manually in the DMCA tool.`;
+
     return {
       steps: {
-        [stepKey]: { ...(run.steps?.[stepKey] || {}), status: "done", note: "All steps complete." }
+        [stepKey]: {
+          ...(run.steps?.[stepKey] || {}),
+          status: "done",
+          note: `All steps complete.${dmcaNote}`
+        }
       },
-      logs: [...(run.logs || []), { at: timestamp, level: "info", message: "Final check complete. All steps done." }]
+      logs: [
+        ...(run.logs || []),
+        { at: timestamp, level: "info", message: "Final check complete. All steps done." },
+        { at: timestamp, level: dmca.ok || dmca.skipped ? "info" : "warning", message: `DMCA portfolio: ${dmca.message}` }
+      ]
     };
   }
 

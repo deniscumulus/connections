@@ -11,6 +11,7 @@ COPY seranking-automation.mjs ./
 COPY seranking-browser.mjs ./
 COPY managewp-automation.mjs ./
 COPY yamix-automation.mjs ./
+COPY dmca-portfolio.mjs ./
 COPY public ./public
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
