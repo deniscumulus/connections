@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-          - name: Create .env file with secrets
+      - name: Create .env file with secrets
         env:
           GPASS: ${{ secrets.GPASS }}
           WPMAIL: ${{ secrets.WPMAIL }}
