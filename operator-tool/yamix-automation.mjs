@@ -555,7 +555,7 @@ export async function setupYamixUpdate(run, yamixEmail, yamixPassword) {
       return {
         success: false,
         needsOperator: true,
-        error: `Yamix rejected the URL as "already exists" — a project with this URL is already in Yamix (or a stale/orphaned URL from a deleted project). Nothing new was created.`
+        error: `Yamix rejected the URL as "already exists" — nothing new was created. Check Yamix for this domain first: if an earlier run reported a 500 on save, that save often DID commit the project despite the error, so it is probably already there and just needs its fields checked. Otherwise it's a stale URL from a deleted project (Yamix doesn't free URLs or GA4 datasets on delete) and a Yamix admin has to release it.`
       };
     }
     if (/duplicate|incorrect|invalid|required/i.test(saveToast) || inlineErr) {
